@@ -51,7 +51,7 @@ test('automatic provider mode prefers an installed local Ollama model', async ()
   })
   assert.equal(requestedUrl, 'http://127.0.0.1:11434/api/tags')
   assert.equal(config.provider, 'ollama')
-  assert.equal(config.model, 'llama3.1')
+  assert.equal(config.model, 'llama3.1:latest')
 })
 
 test('automatic provider mode falls back when the local Ollama service is absent', async () => {
