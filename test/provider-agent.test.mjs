@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, toolName } from '../bridge/provider-agent.mjs'
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
@@ -75,7 +75,6 @@ test('automatic provider mode gives a setup error when no local or cloud option 
   assert.match(config.error, /Start Ollama/)
 })
 
-import { makeToolMessages } from '../bridge/provider-agent.mjs'
 
 test('tool results keep tool replies separate from vision follow-up messages', () => {
   const result = makeToolMessages('call-1', {
@@ -97,4 +96,39 @@ test('tool vision attachments are capped and reject non-supported image payloads
   const result = makeToolMessages('call-2', { text: 'many images', images })
   assert.equal(result.images.length, 4)
   assert.ok(result.images.every((image) => image.startsWith('data:image/webp;')))
+})
+
+test('automatic provider selection resolves a shorthand to the exact installed Ollama tag', async () => {
+  const config = await resolveProviderConfig({
+    provider: 'auto',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: 'qwen3-vl',
+    fallback: null,
+  }, async () => ({
+    ok: true,
+    json: async () => ({ models: [{ name: 'qwen3-vl:4b' }] }),
+  }))
+  assert.equal(config.provider, 'ollama')
+  assert.equal(config.model, 'qwen3-vl:4b')
+})
+
+test('MCP tool names stay unique after sanitisation and within provider limits', () => {
+  const first = toolName('my.server', 'get/item')
+  const second = toolName('my_server', 'get_item')
+  assert.notEqual(first, second)
+  assert.ok(first.length <= 64)
+  assert.ok(second.length <= 64)
+})
+
+test('alternative provider keeps Chrome read tools but gates browser actions by default', () => {
+  const safe = providerNativeTools(false).tools.map((item) => item.function.name)
+  for (const name of ['jarvis_chrome_status', 'jarvis_chrome_tabs', 'jarvis_chrome_navigate', 'jarvis_chrome_read_page', 'jarvis_chrome_screenshot']) {
+    assert.ok(safe.includes(name), name + ' should be available in read-only mode')
+  }
+  for (const name of ['jarvis_chrome_click', 'jarvis_chrome_type', 'jarvis_chrome_key', 'jarvis_chrome_form_input', 'jarvis_chrome_new_tab', 'jarvis_chrome_close_tab']) {
+    assert.ok(!safe.includes(name), name + ' must be withheld in read-only mode')
+  }
+  const writable = providerNativeTools(true).tools.map((item) => item.function.name)
+  assert.ok(writable.includes('jarvis_chrome_click'))
+  assert.ok(writable.includes('jarvis_chrome_close_tab'))
 })
