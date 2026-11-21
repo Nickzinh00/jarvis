@@ -45,8 +45,6 @@ FILES AND INTEGRATIONS:
 - Configured MCP integrations may expose more services. Use only their tools that are actually present.
 `
 
-const mcpToolMap = new Map()
-const nativeToolMap = new Map()
 
 async function withTimeout(promise, timeoutMs, label) {
   let timer
@@ -184,6 +182,8 @@ function mcpConfigs() {
 async function connectMcpServers(allowWrites) {
   const clients = []
   const tools = []
+  const toolMap = new Map()
+  const names = []
   for (const [serverName, config] of Object.entries(mcpConfigs())) {
     if (!config || typeof config !== 'object' || config.disabled === true || config.enabled === false) continue
     let client
@@ -203,6 +203,7 @@ async function connectMcpServers(allowWrites) {
       await withTimeout(client.connect(transport), 10000, 'MCP server ' + serverName + ' connection')
       clients.push(client)
       const listed = await client.listTools()
+      names.push(serverName)
       for (const item of listed.tools || []) {
         const policyName = 'mcp__' + serverName + '__' + item.name
         if (!decideTool(policyName, allowWrites)) continue
@@ -215,7 +216,7 @@ async function connectMcpServers(allowWrites) {
             parameters: objectSchema(item.inputSchema),
           },
         })
-        mcpToolMap.set(exposedName, { client, serverName, toolName: item.name, policyName })
+        toolMap.set(exposedName, { client, serverName, toolName: item.name, policyName })
       }
       console.log('[jarvis] MCP ' + serverName + ': ' + (listed.tools || []).length + ' tool(s)')
     } catch (err) {
@@ -223,14 +224,14 @@ async function connectMcpServers(allowWrites) {
       console.warn('[jarvis] MCP ' + serverName + ' unavailable: ' + (err?.message || err))
     }
   }
-  return { clients, tools, names: Object.keys(mcpConfigs()) }
+  return { clients, tools, toolMap, names }
 }
 
 function schema(properties, required = []) {
   return { type: 'object', properties, ...(required.length ? { required } : {}) }
 }
 
-function nativeTools() {
+function nativeTools(toolMap = new Map()) {
   const defs = [
     ['jarvis_web_search', 'Search public web results and return real titles, URLs and snippets.', schema({ query: { type: 'string' } }, ['query'])],
     ['jarvis_open_url', 'Inspect and open a public article on the JARVIS display.', schema({ url: { type: 'string' }, title: { type: 'string' } }, ['url'])],
@@ -243,7 +244,7 @@ function nativeTools() {
     ['jarvis_list_files', 'List files inside the JARVIS workspace only.', schema({ path: { type: 'string' } })],
     ['jarvis_write_file', 'Write a text file inside the JARVIS workspace. Requires write mode to be enabled locally.', schema({ path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content'])],
   ]
-  for (const [name] of defs) nativeToolMap.set(name, { policyName: {
+  for (const [name] of defs) toolMap.set(name, { policyName: {
     jarvis_web_search: 'mcp__exa__web_search',
     jarvis_open_url: 'mcp__jarvis__blade',
     jarvis_display: 'mcp__jarvis__display',
@@ -364,12 +365,12 @@ async function executeTool(call, ctx) {
   const name = call.function?.name || ''
   let args
   try { args = JSON.parse(call.function?.arguments || '{}') } catch { throw new Error('The model returned invalid JSON arguments for ' + name + '.') }
-  if (nativeToolMap.has(name)) {
-    const verdict = checkToolUse(nativeToolMap.get(name).policyName, args, { allowWrites: ctx.allowWrites, cwd: ctx.workspace, roots: ctx.roots })
+  if (ctx.nativeToolMap.has(name)) {
+    const verdict = checkToolUse(ctx.nativeToolMap.get(name).policyName, args, { allowWrites: ctx.allowWrites, cwd: ctx.workspace, roots: ctx.roots })
     if (!verdict.allow) throw new Error(verdict.reason)
     return executeNative(name, args, ctx)
   }
-  const external = mcpToolMap.get(name)
+  const external = ctx.mcpToolMap.get(name)
   if (!external) throw new Error('Tool ' + name + ' is no longer available. Reconnect and try again.')
   const verdict = checkToolUse(external.policyName, args, { allowWrites: ctx.allowWrites, cwd: ctx.workspace, roots: ctx.roots })
   if (!verdict.allow) throw new Error(verdict.reason)
@@ -443,7 +444,8 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
   let activeConfig = config
   const roots = fileRoots({ workspace, extra: (process.env.JARVIS_FILE_ROOTS || '').split(',').map((s) => s.trim()).filter(Boolean) })
   const mcp = await connectMcpServers(allowWrites)
-  const native = nativeTools().filter((item) => allowWrites || item.function.name !== 'jarvis_write_file')
+  const nativeToolMap = new Map()
+  const native = nativeTools(nativeToolMap).filter((item) => allowWrites || item.function.name !== 'jarvis_write_file')
   const tools = [...native, ...mcp.tools].slice(0, 120)
   send({ type: 'ready', servers: ['local-tools', ...mcp.names], provider: config.provider, model: config.model })
 
@@ -462,15 +464,16 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
 
   async function answer(userText, askId, controller) {
     if (closed || activeAbort !== controller || controller.signal.aborted) return
-    history.push({ role: 'user', content: userText })
-    const context = { send, askBrowser, allowWrites, workspace, roots }
+    turnHistory.push({ role: 'user', content: userText })
+    const turnHistory = history.slice()
+    const context = { send, askBrowser, allowWrites, workspace, roots, nativeToolMap, mcpToolMap: mcp.toolMap }
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         if (closed || activeAbort !== controller || controller.signal.aborted) return
         let emittedText = false
         let result
         try {
-          result = await streamCompletion(activeConfig, history, tools, controller.signal, (delta) => {
+          result = await streamCompletion(activeConfig, turnHistory, tools, controller.signal, (delta) => {
             if (activeAbort === controller && !controller.signal.aborted) {
               emittedText = true
               send({ type: 'text', delta, ask: askId })
@@ -505,23 +508,24 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
           for (const call of result.toolCalls) {
             if (!call.id) call.id = 'call_' + createHash('sha1').update(JSON.stringify(call) + Date.now()).digest('hex').slice(0, 16)
           }
-          history.push({ role: 'assistant', content: result.text || null, tool_calls: result.toolCalls })
+          turnHistory.push({ role: 'assistant', content: result.text || null, tool_calls: result.toolCalls })
           for (const call of result.toolCalls) {
             if (closed || activeAbort !== controller || controller.signal.aborted) return
             send({ type: 'tool', name: call.function?.name || 'tool', ask: askId })
             try {
               const output = await executeTool(call, context)
               if (closed || activeAbort !== controller || controller.signal.aborted) return
-              history.push(...makeToolMessages(call.id, output))
+              turnHistory.push(...makeToolMessages(call.id, output))
             } catch (err) {
               if (closed || activeAbort !== controller || controller.signal.aborted) return
-              history.push({ role: 'tool', tool_call_id: call.id, content: 'Tool error: ' + (err?.message || err) })
+              turnHistory.push({ role: 'tool', tool_call_id: call.id, content: 'Tool error: ' + (err?.message || err) })
             }
           }
           continue
         }
         if (closed || activeAbort !== controller || controller.signal.aborted) return
-        history.push({ role: 'assistant', content: result.text || '' })
+        turnHistory.push({ role: 'assistant', content: result.text || '' })
+        history.splice(0, history.length, ...turnHistory)
         send({ type: 'done', text: result.text || '', provider: activeConfig.provider, ask: askId })
         if (history.length > 30) {
           const userTurns = []
@@ -536,7 +540,8 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
       if (closed || activeAbort !== controller || controller.signal.aborted) return
       const line = 'The tool sequence reached its safety limit. Please narrow the request.'
       send({ type: 'text', delta: line, ask: askId })
-      history.push({ role: 'assistant', content: line })
+      turnHistory.push({ role: 'assistant', content: line })
+      history.splice(0, history.length, ...turnHistory)
       send({ type: 'done', text: line, provider: config.provider, ask: askId })
     } catch (err) {
       if (controller.signal.aborted || activeAbort !== controller || closed) return
@@ -573,8 +578,6 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
     for (const item of waiting.values()) { clearTimeout(item.timer); item.reject(new Error('WebSocket closed.')) }
     waiting.clear()
     for (const client of mcp.clients) void client.close().catch(() => {})
-    mcpToolMap.clear()
-    nativeToolMap.clear()
   }
   socket.once('close', cleanup)
   socket.once('error', cleanup)
