@@ -16,7 +16,7 @@ Open the J.A.R.V.I.S. menu and choose **Configurar provedor de IA...**.
 
 Available choices:
 - Automatic: first checks the configured local Ollama model, then uses a cloud fallback you set up if the local service/model is unavailable.
-- Ollama local: no cloud API key or Claude subscription. Install Ollama, then download a model that supports chat and tool calling. The default example is qwen3-vl:4b.
+- Ollama local: no cloud API key or Claude subscription. Install Ollama, then download a model that supports chat and tool calling. The default local-first model is qwen3-vl:4b (about 3.3 GB); qwen3-vl:2b (about 1.9 GB) is available for lighter hardware.
 - OpenAI API, OpenRouter, Groq, Together AI, DeepSeek API, Google Gemini API, or a custom OpenAI-compatible endpoint: enter an exact model ID and your own provider API key. Cloud APIs may bill usage separately.
 - Claude Agent SDK remains selectable for users who have a working Claude Code login.
 
@@ -26,7 +26,7 @@ The default local model is qwen3-vl:4b, which supports vision and tools; it requ
 
 Use the app menu item **Instalar Ollama local...**, or install Ollama from its official Windows installer. Then open a terminal and run:
 
-    ollama pull llama3.1
+    ollama pull qwen3-vl:4b
 
 Wait for the model download to finish, then configure the Ollama option in J.A.R.V.I.S. The app expects the local OpenAI-compatible endpoint at http://127.0.0.1:11434/v1 by default.
 
