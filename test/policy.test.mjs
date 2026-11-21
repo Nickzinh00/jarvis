@@ -7,13 +7,14 @@ import { builtinTools, checkToolUse, decideTool, fetchTargetProblem, fileRoots }
 
 const workspace = mkdtempSync(join(tmpdir(), 'jarvis-ws-'))
 const roots = fileRoots({ workspace })
-const ctx = (allowWrites = false) => ({ allowWrites, cwd: workspace, roots })
-const allowed = (name, input, w) => checkToolUse(name, input, ctx(w)).allow
+const ctx = (allowWrites = false, allowShell = false) => ({ allowWrites, allowShell, cwd: workspace, roots })
+const allowed = (name, input, w, shell = false) => checkToolUse(name, input, ctx(w, shell)).allow
 
 test('decideTool keeps its existing verdicts', () => {
   assert.equal(decideTool('Read'), true)
   assert.equal(decideTool('Bash'), false)
-  assert.equal(decideTool('Bash', true), true)
+  assert.equal(decideTool('Bash', true), false)
+  assert.equal(decideTool('Bash', true, true), true)
   assert.equal(decideTool('mcp__jarvis__display'), true)
   assert.equal(decideTool('mcp__someserver__list_devices'), true)
   assert.equal(decideTool('mcp__someserver__install_apk'), false)
@@ -26,7 +27,8 @@ test('read-only mode refuses a shell command the CLI would auto-approve', () => 
   // `cat` is what the CLI's own classifier runs without asking canUseTool.
   assert.equal(allowed('Bash', { command: 'cat ~/.ssh/id_rsa' }), false)
   assert.equal(allowed('Bash', { command: 'ls' }), false)
-  assert.equal(allowed('Bash', { command: 'ls' }, true), true)
+  assert.equal(allowed('Bash', { command: 'ls' }, true), false)
+  assert.equal(allowed('Bash', { command: 'ls' }, true, true), true)
 })
 
 test('file tools are confined to the workspace and temp roots', () => {
@@ -119,5 +121,7 @@ test('only the built-ins JARVIS uses are offered', () => {
     assert.ok(!ro.includes(absent), `${absent} should not be offered`)
     assert.ok(!builtinTools(true).includes(absent), `${absent} should not be offered with writes`)
   }
-  assert.ok(builtinTools(true).includes('Bash'))
+  assert.ok(!builtinTools(true).includes('Bash'))
+  assert.ok(builtinTools(true, true).includes('Bash'))
+  assert.ok(builtinTools(true).includes('Write'))
 })
