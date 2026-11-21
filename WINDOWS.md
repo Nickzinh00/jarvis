@@ -1,32 +1,52 @@
-# J.A.R.V.I.S. on Windows 10/11
+# J.A.R.V.I.S. for Windows 10/11 x64
 
-This setup keeps the original React/Three.js interface and local Node bridge. The scripts automate prerequisite checks, dependency installation and startup; they do not replace the agent or remove original features.
+## Install the desktop application
 
-## Install
+1. Open the latest successful **Windows desktop build and verification** run in GitHub Actions:
+   https://github.com/Nickzinh00/jarvis/actions/workflows/windows-ci.yml
+2. Download the artifact named **JARVIS-Windows-x64-Installer**.
+3. Extract the artifact ZIP, then run the .exe installer.
+4. Launch J.A.R.V.I.S. from the Start menu or desktop shortcut.
 
-1. Download and extract the Windows setup ZIP from the Windows build and verification workflow artifact.
-2. Open the extracted folder.
-3. Run in PowerShell:
+The desktop installer bundles Electron/Chromium, the built interface, the local bridge and the existing project dependencies. Node.js and Claude Code are not required on the target PC when using the Ollama or OpenAI-compatible provider engine.
 
-   powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+## Configure the AI brain
 
-4. If prompted, approve installation of the official Node.js LTS package through winget.
-5. When installation finishes, run claude in PowerShell and complete the official Claude Code sign-in.
-6. Start JARVIS by double-clicking start-windows.bat.
+Open the J.A.R.V.I.S. menu and choose **Configurar provedor de IA...**.
 
-## Requirements and limits
+Available choices:
+- Ollama local: no cloud API key or Claude subscription. Install Ollama, then download a model that supports chat and tool calling. The default example is llama3.1.
+- OpenAI API, OpenRouter, Groq, Together AI, DeepSeek API, or a custom OpenAI-compatible endpoint: enter an exact model ID and your own provider API key. Cloud APIs may bill usage separately.
+- Claude Agent SDK remains selectable for users who have a working Claude Code login.
 
-- The scripts install Node.js LTS (when winget is available), Claude Code and the exact dependencies from package-lock.json.
-- JARVIS starts the original local bridge and Vite interface and opens the local page in Chrome/Edge.
-- The original brain uses Claude Code. A valid account/subscription and first-time interactive sign-in are required. The installer cannot bypass authentication or subscription requirements.
-- Optional MCP integrations, ElevenLabs, Picovoice and other third-party services still require their own accounts/keys and setup.
-- The setup does not activate unrestricted write/shell mode. The original default-deny policy remains active.
-- This is a guided Windows setup ZIP, not yet a signed native EXE/MSI installer. GitHub Actions creates the ZIP only after lint, production build and tests pass.
+The local model is not bundled into the installer. Model files can take multiple gigabytes and performance depends on available RAM, storage and GPU.
+
+## Ollama
+
+Use the app menu item **Instalar Ollama local...**, or install Ollama from its official Windows installer. Then open a terminal and run:
+
+    ollama pull llama3.1
+
+Wait for the model download to finish, then configure the Ollama option in J.A.R.V.I.S. The app expects the local OpenAI-compatible endpoint at http://127.0.0.1:11434/v1 by default.
+
+## Existing capabilities
+
+The desktop build keeps the original Three.js interface, voice loop, wake-word pipeline, VAD, interrupt/barge-in, HUD/blades, interface controls, camera look/watch, local file workspace and the existing Claude provider path. The multi-provider engine also connects eligible MCP servers configured in the local Claude MCP settings file or in ~/.jarvis/mcp.json.
+
+Some tools from the Claude Agent SDK are provider-specific. In particular, the original Claude Chrome-extension native-host automation path is not yet fully ported to every alternative provider; those integrations remain available through the original Claude provider or configured MCP servers. Individual external integrations still need their own account, credentials and compatible tool server.
+
+## Safety and privacy
+
+- The bridge binds to loopback and is not exposed to the LAN by default.
+- The normal mode remains read-only. Shell/file/browser actions that change things are not silently enabled.
+- Workspace file operations are constrained by the existing file policy; credential folders and files remain blocked.
+- Provider API keys are stored in the local Windows user profile under .jarvis/provider.json, with the file ACL restricted to the current Windows account. Never send a key or password through chat.
+- Camera access is requested by the desktop app and remains subject to Windows permission settings.
 
 ## Troubleshooting
 
-- If node or claude is not found after installation, close and reopen PowerShell, then run install-windows.ps1 again.
-- Complete authentication in the official Claude Code CLI. Never share passwords, verification codes or API keys.
-- If the browser does not open automatically, visit http://localhost:5173.
-- Keep the PowerShell window open while JARVIS runs. Press Ctrl+C to stop it.
-- Run npm run setup for diagnostics.
+- If Ollama is not reachable, make sure the Ollama app is running and check http://127.0.0.1:11434.
+- If the model is missing, run ollama list and download the model configured in the app.
+- If a cloud provider fails with an authentication or quota error, confirm the key, model ID and billing/usage status on that provider's official dashboard.
+- Keep the default read-only policy enabled unless you understand each action that enabling writes allows.
+- Use the desktop menu's provider settings script to change providers, then fully restart J.A.R.V.I.S.
