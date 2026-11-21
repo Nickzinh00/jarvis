@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { decideTool, checkToolUse, fileRoots, fetchTargetProblem } from './policy.mjs'
 import { probeUrl } from './page.mjs'
 
-const SETTINGS_FILE = homedir() + '/.jarvis/provider.json'
+const SETTINGS_FILE = join(homedir(), '.jarvis', 'provider.json')
 const DEFAULT_OLLAMA = 'http://127.0.0.1:11434/v1'
 const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_RESULT = 16000
@@ -31,8 +31,8 @@ function readJson(path) {
 export function readProviderConfig(env = process.env) {
   const saved = readJson(SETTINGS_FILE)
   const selected = String(env.JARVIS_PROVIDER || saved.provider || 'ollama').toLowerCase()
-  const provider = Object.hasOwn(PROVIDERS, selected) ? selected : 'custom'
-  const defaults = PROVIDERS[provider]
+  const provider = selected === 'claude' ? 'claude' : (Object.hasOwn(PROVIDERS, selected) ? selected : 'custom')
+  const defaults = PROVIDERS[provider] || {}
   return {
     provider,
     baseUrl: String(env.JARVIS_BASE_URL || saved.baseUrl || defaults.baseUrl || '').trim().replace(/\/+$/, ''),
