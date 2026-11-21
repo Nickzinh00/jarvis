@@ -355,7 +355,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
   const config = readProviderConfig()
   const roots = fileRoots({ workspace, extra: (process.env.JARVIS_FILE_ROOTS || '').split(',').map((s) => s.trim()).filter(Boolean) })
   const mcp = await connectMcpServers(allowWrites)
-  const native = nativeTools()
+  const native = nativeTools().filter((item) => allowWrites || item.function.name !== 'jarvis_write_file')
   const tools = [...native, ...mcp.tools].slice(0, 120)
   send({ type: 'ready', servers: ['local-tools', ...mcp.names], provider: config.provider, model: config.model })
 
