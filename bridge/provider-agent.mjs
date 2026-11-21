@@ -7,6 +7,7 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { decideTool, checkToolUse, fileRoots, fetchTargetProblem } from './policy.mjs'
 import { probeUrl } from './page.mjs'
+import { executeChromeTool } from './chrome.mjs'
 
 const SETTINGS_FILE = join(homedir(), '.jarvis', 'provider.json')
 const DEFAULT_OLLAMA = 'http://127.0.0.1:11434/v1'
@@ -243,6 +244,22 @@ function nativeTools(toolMap = new Map()) {
     ['jarvis_read_file', 'Read a text file inside the JARVIS workspace only.', schema({ path: { type: 'string' } }, ['path'])],
     ['jarvis_list_files', 'List files inside the JARVIS workspace only.', schema({ path: { type: 'string' } })],
     ['jarvis_write_file', 'Write a text file inside the JARVIS workspace. Requires write mode to be enabled locally.', schema({ path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content'])],
+    ['jarvis_chrome_status', 'Check whether the user’s signed-in Chrome extension is reachable and list tabs.', schema({})],
+    ['jarvis_chrome_tabs', 'List open tabs in the user’s signed-in Chrome.', schema({ createIfEmpty: { type: 'boolean' } })],
+    ['jarvis_chrome_navigate', 'Navigate the user’s signed-in Chrome to a public or authenticated page, or back/forward.', schema({ url: { type: 'string' }, tabId: { type: 'integer' } }, ['url'])],
+    ['jarvis_chrome_read_page', 'Read the accessibility tree and interactive references from the current Chrome page.', schema({ tabId: { type: 'integer' }, filter: { type: 'string', enum: ['interactive', 'all'] }, max_chars: { type: 'integer' } })],
+    ['jarvis_chrome_page_text', 'Read visible text from the current Chrome page.', schema({ tabId: { type: 'integer' }, max_chars: { type: 'integer' } })],
+    ['jarvis_chrome_find', 'Find an element by description in the current Chrome page.', schema({ query: { type: 'string' }, tabId: { type: 'integer' } }, ['query'])],
+    ['jarvis_chrome_screenshot', 'Take a screenshot of the current Chrome page.', schema({ tabId: { type: 'integer' } })],
+    ['jarvis_chrome_scroll', 'Scroll the current Chrome page.', schema({ direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] }, amount: { type: 'integer' }, tabId: { type: 'integer' } }, ['direction'])],
+    ['jarvis_chrome_console', 'Read console messages from the current Chrome page for diagnostics.', schema({ tabId: { type: 'integer' }, onlyErrors: { type: 'boolean' }, limit: { type: 'integer' } })],
+    ['jarvis_chrome_network', 'List network requests from the current Chrome page or inspect a response by ID.', schema({ tabId: { type: 'integer' }, urlPattern: { type: 'string' }, requestId: { type: 'string' }, limit: { type: 'integer' } })],
+    ['jarvis_chrome_click', 'Click an element on the signed-in Chrome page. Requires local write mode.', schema({ ref: { type: 'string' }, coordinate: { type: 'array', items: { type: 'integer' } }, tabId: { type: 'integer' } })],
+    ['jarvis_chrome_type', 'Type text into the focused Chrome field. Requires local write mode.', schema({ text: { type: 'string' }, tabId: { type: 'integer' } }, ['text'])],
+    ['jarvis_chrome_key', 'Press a key or key chord in Chrome. Requires local write mode.', schema({ text: { type: 'string' }, tabId: { type: 'integer' } }, ['text'])],
+    ['jarvis_chrome_form_input', 'Set an input value on the Chrome page. Requires local write mode.', schema({ ref: { type: 'string' }, value: { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] }, tabId: { type: 'integer' } }, ['ref', 'value'])],
+    ['jarvis_chrome_new_tab', 'Open a new blank Chrome tab. Requires local write mode.', schema({})],
+    ['jarvis_chrome_close_tab', 'Close a Chrome tab by ID. Requires local write mode.', schema({ tabId: { type: 'integer' } }, ['tabId'])],
   ]
   for (const [name] of defs) toolMap.set(name, { policyName: {
     jarvis_web_search: 'mcp__exa__web_search',
@@ -255,10 +272,39 @@ function nativeTools(toolMap = new Map()) {
     jarvis_read_file: 'Read',
     jarvis_list_files: 'Glob',
     jarvis_write_file: 'Write',
+    jarvis_chrome_status: 'mcp__jarvis_chrome__chrome_status',
+    jarvis_chrome_tabs: 'mcp__jarvis_chrome__chrome_tabs',
+    jarvis_chrome_navigate: 'mcp__jarvis_chrome__chrome_navigate',
+    jarvis_chrome_read_page: 'mcp__jarvis_chrome__chrome_read_page',
+    jarvis_chrome_page_text: 'mcp__jarvis_chrome__chrome_page_text',
+    jarvis_chrome_find: 'mcp__jarvis_chrome__chrome_find',
+    jarvis_chrome_screenshot: 'mcp__jarvis_chrome__chrome_screenshot',
+    jarvis_chrome_scroll: 'mcp__jarvis_chrome__chrome_scroll',
+    jarvis_chrome_console: 'mcp__jarvis_chrome__chrome_console',
+    jarvis_chrome_network: 'mcp__jarvis_chrome__chrome_network',
+    jarvis_chrome_click: 'mcp__jarvis_chrome__chrome_click',
+    jarvis_chrome_type: 'mcp__jarvis_chrome__chrome_type',
+    jarvis_chrome_key: 'mcp__jarvis_chrome__chrome_key',
+    jarvis_chrome_form_input: 'mcp__jarvis_chrome__chrome_form_input',
+    jarvis_chrome_new_tab: 'mcp__jarvis_chrome__chrome_new_tab',
+    jarvis_chrome_close_tab: 'mcp__jarvis_chrome__chrome_close_tab',
   }[name] })
   return defs.map(([name, description, parameters]) => ({
     type: 'function', function: { name, description, parameters },
   }))
+}
+
+export function providerNativeTools(allowWrites = false) {
+  const toolMap = new Map()
+  const tools = nativeTools(toolMap).filter((item) => {
+    const name = item.function.name
+    if (!allowWrites && (name === 'jarvis_write_file' || name.startsWith('jarvis_chrome_click') ||
+      name === 'jarvis_chrome_type' || name === 'jarvis_chrome_key' ||
+      name === 'jarvis_chrome_form_input' || name === 'jarvis_chrome_new_tab' ||
+      name === 'jarvis_chrome_close_tab')) return false
+    return true
+  })
+  return { tools, toolMap }
 }
 
 function htmlText(value) {
@@ -282,6 +328,22 @@ export function makeToolMessages(id, result) {
 
 async function executeNative(name, args, ctx) {
   const { send, askBrowser, workspace, roots, allowWrites } = ctx
+  if (name.startsWith('jarvis_chrome_')) {
+    const result = await executeChromeTool(name.replace(/^jarvis_/, ''), args)
+    if (result?.isError) {
+      const detail = Array.isArray(result.content) ? textOnly(result.content) : result.text
+      throw new Error(detail || 'Chrome extension operation failed.')
+    }
+    const texts = []
+    const images = []
+    for (const part of result?.content || []) {
+      if (part?.type === 'text' && part.text) texts.push(part.text)
+      if (part?.type === 'image' && part.data && part.mimeType) {
+        images.push('data:' + part.mimeType + ';base64,' + part.data)
+      }
+    }
+    return { text: (texts.join('\\n') || result?.text || 'Chrome operation completed.').slice(0, MAX_TOOL_RESULT), images }
+  }
   if (name === 'jarvis_web_search') return { text: await webSearch(args.query) }
   if (name === 'jarvis_open_url') {
     const url = String(args.url || '').trim()
@@ -442,9 +504,9 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
   let activeConfig = config
   const roots = fileRoots({ workspace, extra: (process.env.JARVIS_FILE_ROOTS || '').split(',').map((s) => s.trim()).filter(Boolean) })
   const mcp = await connectMcpServers(allowWrites)
-  const nativeToolMap = new Map()
-  const native = nativeTools(nativeToolMap).filter((item) => allowWrites || item.function.name !== 'jarvis_write_file')
-  const tools = [...native, ...mcp.tools].slice(0, 120)
+  const nativeSet = providerNativeTools(allowWrites)
+  const nativeToolMap = nativeSet.toolMap
+  const tools = [...nativeSet.tools, ...mcp.tools].slice(0, 120)
   send({ type: 'ready', servers: ['local-tools', ...mcp.names], provider: config.provider, model: config.model })
 
   const history = [{ role: 'system', content: systemPrompt + COMPATIBLE_PROVIDER_GUIDANCE }]
