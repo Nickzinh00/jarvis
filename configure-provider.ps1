@@ -35,11 +35,11 @@ Write-Host "8 - Google Gemini API"
 Write-Host "9 - Outro endpoint compatível com OpenAI"
 $choice = Read-Host "Escolha (1-9)"
 
-$local = @{ provider = "auto"; baseUrl = "http://127.0.0.1:11434/v1"; model = "llama3.1"; apiKey = "ollama" }
+$local = @{ provider = "auto"; baseUrl = "http://127.0.0.1:11434/v1"; model = "qwen3-vl:4b"; apiKey = "ollama" }
 $config = $null
 if ($choice -eq "1") {
-  $localModel = Read-Host "Modelo local Ollama (Enter para llama3.1)"
-  if ([string]::IsNullOrWhiteSpace($localModel)) { $localModel = "llama3.1" }
+  $localModel = Read-Host "Modelo local Ollama (Enter para qwen3-vl:4b)"
+  if ([string]::IsNullOrWhiteSpace($localModel)) { $localModel = "qwen3-vl:4b" }
   $local.model = $localModel
   $config = $local
   Write-Host ""
@@ -66,8 +66,8 @@ if ($choice -eq "1") {
     $config.fallback = Read-CloudConfig $fallbackInfo.provider $fallbackInfo.baseUrl
   }
 } elseif ($choice -eq "2") {
-  $model = Read-Host "Modelo Ollama (Enter para llama3.1)"
-  if ([string]::IsNullOrWhiteSpace($model)) { $model = "llama3.1" }
+  $model = Read-Host "Modelo Ollama (Enter para qwen3-vl:4b)"
+  if ([string]::IsNullOrWhiteSpace($model)) { $model = "qwen3-vl:4b" }
   $config = @{ provider = "ollama"; baseUrl = "http://127.0.0.1:11434/v1"; model = $model; apiKey = "ollama" }
 } else {
   $providers = @{
