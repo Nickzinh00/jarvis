@@ -2,7 +2,7 @@ name: Windows desktop build and verification
 
 on:
   push:
-    branches: [main, jarvis-windows-executor]
+    branches: [main, jarvis-windows-executor, 'release/*']
   pull_request:
     branches: [main]
   workflow_dispatch:
