@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, resolveProviderConfig } from '../bridge/provider-agent.mjs'
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
@@ -36,4 +36,41 @@ test('cloud provider configuration is read from environment settings', () => {
   assert.equal(config.provider, 'openrouter')
   assert.equal(config.model, 'provider/model-id')
   assert.equal(config.apiKey, 'test-only-key')
+})
+
+test('automatic provider mode prefers an installed local Ollama model', async () => {
+  let requestedUrl = ''
+  const config = await resolveProviderConfig({
+    provider: 'auto',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: 'llama3.1',
+    fallback: { provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'provider/fallback', apiKey: 'local-test-key' },
+  }, async (url) => {
+    requestedUrl = url
+    return { ok: true, json: async () => ({ models: [{ name: 'llama3.1:latest' }] }) }
+  })
+  assert.equal(requestedUrl, 'http://127.0.0.1:11434/api/tags')
+  assert.equal(config.provider, 'ollama')
+  assert.equal(config.model, 'llama3.1')
+})
+
+test('automatic provider mode falls back when the local Ollama service is absent', async () => {
+  const config = await resolveProviderConfig({
+    provider: 'auto',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: 'llama3.1',
+    fallback: { provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'provider/fallback', apiKey: 'local-test-key' },
+  }, async () => ({ ok: false }))
+  assert.equal(config.provider, 'openrouter')
+  assert.equal(config.model, 'provider/fallback')
+})
+
+test('automatic provider mode gives a setup error when no local or cloud option is ready', async () => {
+  const config = await resolveProviderConfig({
+    provider: 'auto',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: 'llama3.1',
+    fallback: null,
+  }, async () => { throw new Error('offline') })
+  assert.match(config.error, /Start Ollama/)
 })
