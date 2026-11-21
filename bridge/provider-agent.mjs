@@ -54,7 +54,7 @@ export function readProviderConfig(env = process.env) {
     fallback: saved.fallback || null,
     baseUrl: String(env.JARVIS_BASE_URL || saved.baseUrl || defaults.baseUrl || '').trim().replace(/\/+$/, ''),
     apiKey: String(env.JARVIS_API_KEY || saved.apiKey || defaults.apiKey || '').trim(),
-    model: String(env.JARVIS_MODEL_NAME || saved.model || (provider === 'ollama' ? 'llama3.1' : '')).trim(),
+    model: String(env.JARVIS_MODEL_NAME || saved.model || (['ollama', 'auto'].includes(provider) ? 'llama3.1' : '')).trim(),
   }
 }
 
