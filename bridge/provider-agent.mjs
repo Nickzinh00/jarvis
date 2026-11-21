@@ -462,8 +462,8 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
 
   async function answer(userText, askId, controller) {
     if (closed || activeAbort !== controller || controller.signal.aborted) return
-    turnHistory.push({ role: 'user', content: userText })
     const turnHistory = history.slice()
+    turnHistory.push({ role: 'user', content: userText })
     const context = { send, askBrowser, allowWrites, workspace, roots, nativeToolMap, mcpToolMap: mcp.toolMap }
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -497,7 +497,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
             provider: activeConfig.provider,
             model: activeConfig.model,
           })
-          result = await streamCompletion(activeConfig, history, tools, controller.signal, (delta) => {
+          result = await streamCompletion(activeConfig, turnHistory, tools, controller.signal, (delta) => {
             if (activeAbort === controller && !controller.signal.aborted) send({ type: 'text', delta, ask: askId })
           })
         }
