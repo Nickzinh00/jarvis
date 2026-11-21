@@ -29,7 +29,9 @@ Not every Claude Agent SDK-specific built-in can be reproduced identically on ev
 
 ## Security defaults
 
-The bridge binds to loopback. The executor remains read-only by default, and workspace file access stays restricted. Do not enable write access unless you understand the effect of the available actions. Never paste API keys, passwords or verification codes into chat.
+The bridge binds to loopback. Third-party MCP integrations are not started unless their exact names are listed in `JARVIS_MCP_SERVERS`; the default is none. Workspace file edits and browser interactions require `JARVIS_ALLOW_WRITES=1`. Arbitrary terminal commands require both `JARVIS_ALLOW_WRITES=1` and the separate `JARVIS_ALLOW_SHELL=1` opt-in. Keep shell access disabled unless it is genuinely needed. File tools remain restricted to the JARVIS workspace and approved temporary folders, with credential locations blocked. Never paste API keys, passwords or verification codes into chat.
+
+The Windows installer is not currently signed with a commercial code-signing certificate, so SmartScreen may show an unknown-publisher/reputation warning. That warning alone is not a malware verdict; it is also not proof that a file is safe. Review the release checksum and do not install if Microsoft Defender reports a named threat.
 
 ## Development
 
