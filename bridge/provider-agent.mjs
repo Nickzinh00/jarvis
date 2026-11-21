@@ -423,30 +423,38 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
     send({ type: kind, id, ...args })
   })
 
-  async function answer(userText, askId) {
+  async function answer(userText, askId, controller) {
+    if (closed || activeAbort !== controller || controller.signal.aborted) return
     history.push({ role: 'user', content: userText })
     const context = { send, askBrowser, allowWrites, workspace, roots }
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        if (closed || !activeAbort || activeAbort.signal.aborted) return
-        const result = await streamCompletion(config, history, tools, activeAbort.signal,
-          (delta) => send({ type: 'text', delta, ask: askId }))
+        if (closed || activeAbort !== controller || controller.signal.aborted) return
+        const result = await streamCompletion(config, history, tools, controller.signal,
+          (delta) => {
+            if (activeAbort === controller && !controller.signal.aborted) send({ type: 'text', delta, ask: askId })
+          })
+        if (closed || activeAbort !== controller || controller.signal.aborted) return
         if (result.toolCalls.length) {
           for (const call of result.toolCalls) {
             if (!call.id) call.id = 'call_' + createHash('sha1').update(JSON.stringify(call) + Date.now()).digest('hex').slice(0, 16)
           }
           history.push({ role: 'assistant', content: result.text || null, tool_calls: result.toolCalls })
           for (const call of result.toolCalls) {
+            if (closed || activeAbort !== controller || controller.signal.aborted) return
             send({ type: 'tool', name: call.function?.name || 'tool', ask: askId })
             try {
               const output = await executeTool(call, context)
+              if (closed || activeAbort !== controller || controller.signal.aborted) return
               history.push(makeToolMessage(call.id, output))
             } catch (err) {
+              if (closed || activeAbort !== controller || controller.signal.aborted) return
               history.push({ role: 'tool', tool_call_id: call.id, content: 'Tool error: ' + (err?.message || err) })
             }
           }
           continue
         }
+        if (closed || activeAbort !== controller || controller.signal.aborted) return
         history.push({ role: 'assistant', content: result.text || '' })
         send({ type: 'done', text: result.text || '', provider: config.provider, ask: askId })
         if (history.length > 30) {
@@ -459,12 +467,13 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
         }
         return
       }
+      if (closed || activeAbort !== controller || controller.signal.aborted) return
       const line = 'The tool sequence reached its safety limit. Please narrow the request.'
       send({ type: 'text', delta: line, ask: askId })
       history.push({ role: 'assistant', content: line })
       send({ type: 'done', text: line, provider: config.provider, ask: askId })
     } catch (err) {
-      if (activeAbort?.signal.aborted) return
+      if (controller.signal.aborted || activeAbort !== controller || closed) return
       console.error('[jarvis] provider turn failed:', err)
       send({ type: 'error', message: String(err?.message || err), ask: askId })
     }
@@ -486,7 +495,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
       const askId = typeof message.id === 'string' ? message.id : null
       void Promise.resolve().then(() => {
         if (activeAbort !== controller || controller.signal.aborted) return
-        return answer(message.text, askId)
+        return answer(message.text, askId, controller)
       })
     }
   })
