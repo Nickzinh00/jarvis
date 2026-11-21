@@ -24,6 +24,20 @@ const PROVIDERS = {
 const mcpToolMap = new Map()
 const nativeToolMap = new Map()
 
+async function withTimeout(promise, timeoutMs, label) {
+  let timer
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label + ' timed out after ' + timeoutMs + 'ms')), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function readJson(path) {
   try { return JSON.parse(readFileSync(path, 'utf8')) } catch { return {} }
 }
@@ -88,8 +102,15 @@ async function webSearch(query) {
   const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
   let match
   while ((match = re.exec(html)) && results.length < 8) {
-    const url = htmlAttr(match[1])
+    let url = htmlAttr(match[1])
     const title = stripHtml(match[2])
+    try {
+      const parsed = new URL(url, 'https://duckduckgo.com')
+      const destination = parsed.searchParams.get('uddg')
+      url = destination ? decodeURIComponent(destination) : parsed.href
+    } catch {
+      continue
+    }
     if (!title || !/^https?:\/\//i.test(url)) continue
     const section = html.slice(re.lastIndex, re.lastIndex + 1200)
     const snippet = /class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|div)>/i.exec(section)
@@ -125,10 +146,7 @@ async function connectMcpServers(allowWrites) {
       } else if (typeof config.url === 'string' && /^https?:\/\//i.test(config.url)) {
         transport = new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers || {} } })
       } else continue
-      await Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 10000)),
-      ])
+      await withTimeout(client.connect(transport), 10000, 'MCP server ' + serverName + ' connection')
       clients.push(client)
       const listed = await client.listTools()
       for (const item of listed.tools || []) {
@@ -381,6 +399,9 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
         const result = await streamCompletion(config, history, tools, activeAbort.signal,
           (delta) => send({ type: 'text', delta, ask: askId }))
         if (result.toolCalls.length) {
+          for (const call of result.toolCalls) {
+            if (!call.id) call.id = 'call_' + createHash('sha1').update(JSON.stringify(call) + Date.now()).digest('hex').slice(0, 16)
+          }
           history.push({ role: 'assistant', content: result.text || null, tool_calls: result.toolCalls })
           for (const call of result.toolCalls) {
             send({ type: 'tool', name: call.function?.name || 'tool', ask: askId })
@@ -395,7 +416,14 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
         }
         history.push({ role: 'assistant', content: result.text || '' })
         send({ type: 'done', text: result.text || '', provider: config.provider, ask: askId })
-        if (history.length > 30) history.splice(1, history.length - 25)
+        if (history.length > 30) {
+          const userTurns = []
+          for (let index = 1; index < history.length; index++) {
+            if (history[index]?.role === 'user') userTurns.push(index)
+          }
+          const keepFrom = userTurns[Math.max(0, userTurns.length - 8)] ?? 1
+          if (keepFrom > 1) history.splice(1, keepFrom - 1)
+        }
         return
       }
       const line = 'The tool sequence reached its safety limit. Please narrow the request.'
