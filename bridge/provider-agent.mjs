@@ -87,12 +87,15 @@ export async function resolveProviderConfig(config = readProviderConfig(), fetch
     const response = await fetchImpl(localBase + '/api/tags', { signal: AbortSignal.timeout(1800) })
     if (response.ok) {
       const payload = await response.json()
-      const modelNames = (payload.models || []).map((item) => String(item.name || item.model || ''))
+      const modelNames = (payload.models || []).map((item) => String(item.name || item.model || '')).filter(Boolean)
       const requested = String(config.model || DEFAULT_LOCAL_MODEL)
-      const installed = modelNames.some((name) =>
-        name === requested || name.startsWith(requested + ':') || requested.startsWith(name + ':'),
-      )
-      if (installed) return { ...config, provider: 'ollama', baseUrl: config.baseUrl || DEFAULT_OLLAMA, model: requested }
+      // Resolve a shorthand alias to the exact installed tag. Sending the
+      // shorthand when only "model:tag" exists makes Ollama answer 404.
+      const matchedModel = modelNames.find((name) => name === requested) ||
+        modelNames.find((name) => name.startsWith(requested + ':'))
+      if (matchedModel) {
+        return { ...config, provider: 'ollama', baseUrl: config.baseUrl || DEFAULT_OLLAMA, model: matchedModel }
+      }
     }
   } catch {
     // Local service unavailable: continue to the explicitly configured fallback.
@@ -113,10 +116,12 @@ export function openAIEndpoint(baseUrl) {
   return clean.endsWith('/chat/completions') ? clean : clean + '/chat/completions'
 }
 
-function toolName(server, name) {
-  const raw = ('mcp_' + server + '_' + name).replace(/[^a-zA-Z0-9_-]/g, '_')
-  if (raw.length <= 64) return raw
-  return raw.slice(0, 55) + '_' + createHash('sha1').update(raw).digest('hex').slice(0, 8)
+export function toolName(server, name) {
+  const original = 'mcp_' + server + '_' + name
+  const safe = original.replace(/[^a-zA-Z0-9_-]/g, '_')
+  // Always append a digest: two distinct MCP names can collapse to the same
+  // underscore-normalised name, even when neither one is too long.
+  return safe.slice(0, 55) + '_' + createHash('sha1').update(original).digest('hex').slice(0, 8)
 }
 
 function objectSchema(schema) {
