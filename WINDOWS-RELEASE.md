@@ -6,6 +6,6 @@ The **Windows desktop build and verification** GitHub Actions workflow produces 
 2. Open the newest successful run for the jarvis-windows-executor branch.
 3. Download the artifact named **JARVIS-Windows-x64-Installer**.
 4. Extract the artifact ZIP and run the included .exe installer.
-5. Follow WINDOWS.md to choose a local or cloud AI provider.
+5. Follow WINDOWS.md to choose automatic local-first mode, configure an optional cloud fallback, or use a cloud provider directly.
 
 The .exe installs the desktop shell and application runtime. It does not include a local language model; Ollama and model files are installed separately because those can require several gigabytes. Cloud providers require the user's own API key and may charge usage.
