@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, toolName } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, streamCompletion, toolName } from '../bridge/provider-agent.mjs'
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
@@ -131,4 +131,38 @@ test('alternative provider keeps Chrome read tools but gates browser actions by 
   const writable = providerNativeTools(true).tools.map((item) => item.function.name)
   assert.ok(writable.includes('jarvis_chrome_click'))
   assert.ok(writable.includes('jarvis_chrome_close_tab'))
+})
+
+test('compatible provider accepts a non-streaming JSON completion response', async () => {
+  const emitted = []
+  const result = await streamCompletion(
+    { provider: 'custom', baseUrl: 'https://api.example.test/v1', model: 'test-model', apiKey: 'test-key' },
+    [{ role: 'user', content: 'hello' }],
+    [],
+    new AbortController().signal,
+    (chunk) => emitted.push(chunk),
+    async (url, options) => {
+      assert.equal(url, 'https://api.example.test/v1/chat/completions')
+      assert.equal(options.method, 'POST')
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          choices: [{
+            message: {
+              content: 'Hello from JSON mode.',
+              tool_calls: [{
+                id: 'call-json',
+                function: { name: 'jarvis_web_search', arguments: { query: 'test' } },
+              }],
+            },
+          }],
+        }),
+      }
+    },
+  )
+  assert.equal(result.text, 'Hello from JSON mode.')
+  assert.deepEqual(emitted, ['Hello from JSON mode.'])
+  assert.equal(result.toolCalls[0].id, 'call-json')
+  assert.equal(result.toolCalls[0].function.arguments, '{"query":"test"}')
 })
