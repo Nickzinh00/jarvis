@@ -1,6 +1,18 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, restrictToolRegistries, streamCompletion, toolName } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, restrictToolRegistries, streamCompletion, toolName, filterMcpConfigs } from '../bridge/provider-agent.mjs'
+
+
+test('MCP configurations require an explicit server allowlist', () => {
+  const configured = {
+    search: { command: 'search-mcp' },
+    mail: { command: 'mail-mcp' },
+  }
+  assert.deepEqual(filterMcpConfigs(configured), {})
+  assert.deepEqual(filterMcpConfigs(configured, ''), {})
+  assert.deepEqual(filterMcpConfigs(configured, 'search'), { search: configured.search })
+  assert.deepEqual(filterMcpConfigs(configured, '*'), configured)
+})
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
