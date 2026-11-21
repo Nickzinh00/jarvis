@@ -40,6 +40,28 @@ if (-not $ollama) {
 }
 if (-not $ollama) { throw "Ollama foi instalado, mas ollama.exe não foi encontrado. Reinicie o Windows e tente novamente." }
 
+# Qwen3-VL needs Ollama 0.12.7 or newer.
+$versionText = (& $ollama --version 2>&1 | Out-String)
+$versionMatch = [regex]::Match($versionText, '(\d+\.\d+\.\d+)')
+if (-not $versionMatch.Success) {
+  throw "Não foi possível identificar a versão do Ollama. Atualize pelo instalador oficial: https://ollama.com/download/windows"
+}
+$ollamaVersion = [version]$versionMatch.Groups[1].Value
+if ($ollamaVersion -lt [version]"0.12.7") {
+  Write-Host "Atualizando Ollama: Qwen3-VL precisa da versão 0.12.7 ou mais recente." -ForegroundColor Yellow
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    throw "Atualize o Ollama pelo instalador oficial: https://ollama.com/download/windows"
+  }
+  winget upgrade --id Ollama.Ollama --exact --source winget --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -ne 0) { throw "Atualize o Ollama para 0.12.7+ pelo instalador oficial: https://ollama.com/download/windows" }
+  $ollama = Resolve-OllamaPath
+  $versionText = (& $ollama --version 2>&1 | Out-String)
+  $versionMatch = [regex]::Match($versionText, '(\d+\.\d+\.\d+)')
+  if (-not $versionMatch.Success -or [version]$versionMatch.Groups[1].Value -lt [version]"0.12.7") {
+    throw "Ollama 0.12.7+ ainda não está disponível. Reinicie o Windows e tente novamente."
+  }
+}
+
 # The desktop app normally starts the local service. Start it when this helper
 # is run before the first JARVIS launch.
 try {
