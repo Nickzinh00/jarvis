@@ -303,12 +303,20 @@ export function providerNativeTools(allowWrites = false) {
   const toolMap = new Map()
   const tools = nativeTools(toolMap).filter((item) => {
     const name = item.function.name
-    if (!allowWrites && (name === 'jarvis_write_file' || name.startsWith('jarvis_chrome_click') ||
+    if (!allowWrites && (name === 'jarvis_write_file' || name === 'jarvis_chrome_click' ||
       name === 'jarvis_chrome_type' || name === 'jarvis_chrome_key' ||
       name === 'jarvis_chrome_form_input' || name === 'jarvis_chrome_new_tab' ||
       name === 'jarvis_chrome_close_tab')) return false
     return true
   })
+  // Keep the executable registry identical to the tools advertised to the
+  // model. This matters for mcp__jarvis_chrome: policy.js intentionally trusts
+  // the server to omit write actions, so a hidden tool must not remain callable
+  // merely because the model guesses its name.
+  const exposed = new Set(tools.map((item) => item.function.name))
+  for (const name of toolMap.keys()) {
+    if (!exposed.has(name)) toolMap.delete(name)
+  }
   return { tools, toolMap }
 }
 
