@@ -39,8 +39,11 @@ Some tools from the Claude Agent SDK are provider-specific. In particular, the o
 ## Safety and privacy
 
 - The bridge binds to loopback and is not exposed to the LAN by default.
-- The normal mode remains read-only. Shell/file/browser actions that change things are not silently enabled.
+- Third-party MCP servers are not started unless their exact names are listed in `JARVIS_MCP_SERVERS`; the default is none.
+- Workspace file edits and Chrome interactions require `JARVIS_ALLOW_WRITES=1`.
+- Arbitrary terminal commands require both `JARVIS_ALLOW_WRITES=1` and `JARVIS_ALLOW_SHELL=1`; leave shell access disabled unless necessary.
 - Workspace file operations are constrained by the existing file policy; credential folders and files remain blocked.
+- The installer is not signed with a commercial code-signing certificate, so SmartScreen may report an unknown publisher. Do not install if Defender names a specific threat; provide that threat name for investigation instead.
 - Provider API keys are stored in the local Windows user profile under .jarvis/provider.json, with the file ACL restricted to the current Windows account. Never send a key or password through chat.
 - Camera access is requested by the desktop app and remains subject to Windows permission settings.
 
