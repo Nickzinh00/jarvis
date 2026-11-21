@@ -1,0 +1,51 @@
+name: Windows build and verification
+on:
+  push:
+    branches: [main, jarvis-windows-executor]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Test suite
+        run: npm test
+      - name: Assemble Windows setup bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stage = Join-Path $env:RUNNER_TEMP "JARVIS-Windows"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          git archive --format=tar HEAD | tar -xf - -C $stage
+          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath (Join-Path $env:GITHUB_WORKSPACE "JARVIS-Windows-Setup.zip") -Force
+      - name: Upload Windows setup bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Windows-Setup
+          path: JARVIS-Windows-Setup.zip
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload production web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-web-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
