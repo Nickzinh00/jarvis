@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, streamCompletion, toolName } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, restrictToolRegistries, streamCompletion, toolName } from '../bridge/provider-agent.mjs'
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
@@ -168,4 +168,16 @@ test('compatible provider accepts a non-streaming JSON completion response', asy
   assert.deepEqual(emitted, ['Hello from JSON mode.'])
   assert.equal(result.toolCalls[0].id, 'call-json')
   assert.equal(result.toolCalls[0].function.arguments, '{"query":"test"}')
+})
+
+test('only provider tools actually advertised to the model remain executable', () => {
+  const exposed = [{ function: { name: 'visible_tool' } }]
+  const registry = new Map([
+    ['visible_tool', { policyName: 'Read' }],
+    ['hidden_tool', { policyName: 'Write' }],
+  ])
+  const result = restrictToolRegistries(exposed, registry)
+  assert.equal(result, exposed)
+  assert.equal(registry.has('visible_tool'), true)
+  assert.equal(registry.has('hidden_tool'), false)
 })
