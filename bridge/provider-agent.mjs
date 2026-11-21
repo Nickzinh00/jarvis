@@ -178,11 +178,19 @@ async function webSearch(query) {
   return results.map((r, i) => (i + 1) + '. ' + r.title + '\n' + r.url + '\n' + r.snippet).join('\n\n')
 }
 
+export function filterMcpConfigs(configs, allowList = process.env.JARVIS_MCP_SERVERS) {
+  if (typeof allowList !== 'string' || !allowList.trim()) return {}
+  const wanted = new Set(allowList.split(',').map((name) => name.trim()).filter(Boolean))
+  if (wanted.has('*')) return configs
+  return Object.fromEntries(Object.entries(configs).filter(([name]) => wanted.has(name)))
+}
+
 function mcpConfigs() {
   const user = readJson(homedir() + '/.claude.json')
   const project = user.projects?.[homedir()]?.mcpServers || {}
   const extra = readJson(homedir() + '/.jarvis/mcp.json')
-  return { ...(user.mcpServers || {}), ...project, ...(extra.mcpServers || {}) }
+  const configured = { ...(user.mcpServers || {}), ...project, ...(extra.mcpServers || {}) }
+  return filterMcpConfigs(configured)
 }
 
 async function connectMcpServers(allowWrites) {
@@ -190,6 +198,9 @@ async function connectMcpServers(allowWrites) {
   const tools = []
   const toolMap = new Map()
   const names = []
+  // Do not spawn a configured stdio server unless its exact name was explicitly
+  // placed on JARVIS_MCP_SERVERS. Third-party MCP commands run with this user's
+  // privileges and environment, so configuration alone is not consent.
   for (const [serverName, config] of Object.entries(mcpConfigs())) {
     if (!config || typeof config !== 'object' || config.disabled === true || config.enabled === false) continue
     let client
