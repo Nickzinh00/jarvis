@@ -218,6 +218,13 @@ export default function App() {
     }
   }
 
+  const sendTextMessage = (message: string) => {
+    const clean = message.trim()
+    if (!clean) return
+    store.getState().setError(null)
+    void respond(clean)
+  }
+
   // -- voice events ---------------------------------------------------------
 
   /** What the voice loop should do with what it hears, derived from phase. */
@@ -700,7 +707,7 @@ export default function App() {
   return (
     <>
       <Scene />
-      <Hud />
+      <Hud onSend={sendTextMessage} />
       <Boot />
       <Diagnostics />
       <Ignition onStart={() => void powerOn()} />
