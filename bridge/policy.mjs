@@ -45,9 +45,13 @@ export const READ_ONLY_BUILTINS = new Set([
   'BashOutput', 'TaskOutput',
 ])
 export const WRITE_BUILTINS = new Set([
-  'Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit',
+  'Write', 'Edit', 'MultiEdit', 'NotebookEdit',
   'KillShell', 'TaskStop',
 ])
+
+// Arbitrary shell commands have a separate, stricter opt-in. File writes do
+// not implicitly grant a shell, because a shell can change the whole machine.
+export const SHELL_BUILTINS = new Set(['Bash'])
 
 /** MCP tools arrive as `mcp__<server>__<tool>`. */
 const mcpServerOf = (toolName) =>
@@ -126,8 +130,9 @@ const VETO_EXEMPT = new Set([
   'openrouter__send-feedback',
 ])
 
-export function decideTool(name, allowWrites = false) {
+export function decideTool(name, allowWrites = false, allowShell = false) {
   if (READ_ONLY_BUILTINS.has(name)) return true
+  if (SHELL_BUILTINS.has(name)) return allowWrites && allowShell
   if (WRITE_BUILTINS.has(name)) return allowWrites
 
   const server = mcpServerOf(name)
@@ -179,9 +184,10 @@ export function decideTool(name, allowWrites = false) {
  * Grep and Glob are named because native builds otherwise search with Bash,
  * which is exactly what read-only mode withholds.
  */
-export function builtinTools(allowWrites = false) {
+export function builtinTools(allowWrites = false, allowShell = false) {
   const reads = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'ToolSearch']
-  return allowWrites ? [...reads, 'Bash', 'Write', 'Edit', 'NotebookEdit'] : reads
+  if (!allowWrites) return reads
+  return [...reads, ...(allowShell ? ['Bash'] : []), 'Write', 'Edit', 'NotebookEdit']
 }
 
 // ---------------------------------------------------------------------------
@@ -291,8 +297,8 @@ export function pathProblem(target, { cwd, roots }) {
  * spoken, so it is a plain sentence with no paths or commands to read out
  * beyond the one the model already chose.
  */
-export function checkToolUse(name, input, { allowWrites = false, cwd, roots }) {
-  if (!decideTool(name, allowWrites)) {
+export function checkToolUse(name, input, { allowWrites = false, allowShell = false, cwd, roots }) {
+  if (!decideTool(name, allowWrites, allowShell)) {
     return {
       allow: false,
       reason:
