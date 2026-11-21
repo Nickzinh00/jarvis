@@ -46,11 +46,11 @@ function bannerWith(overrides) {
   })
 }
 
-test('unset passes every configured server, as before', async () => {
-  assert.match(await bannerWith({}), /config: search, mailer ·/)
+test('MCP servers are not passed to JARVIS by default', async () => {
+  assert.match(await bannerWith({}), /config: none/)
 })
 
-test('JARVIS_MCP_SERVERS passes only the named servers', async () => {
+test('JARVIS_MCP_SERVERS passes only the explicitly named servers', async () => {
   const line = await bannerWith({ JARVIS_MCP_SERVERS: 'search' })
   assert.match(line, /config: search ·/)
   assert.doesNotMatch(line, /mailer/)
@@ -58,6 +58,10 @@ test('JARVIS_MCP_SERVERS passes only the named servers', async () => {
 
 test('an empty JARVIS_MCP_SERVERS passes none', async () => {
   assert.match(await bannerWith({ JARVIS_MCP_SERVERS: '' }), /config: none/)
+})
+
+test('wildcard opt-in is explicit and passes every configured server', async () => {
+  assert.match(await bannerWith({ JARVIS_MCP_SERVERS: '*' }), /config: search, mailer ·/)
 })
 
 test('account connectors are off unless asked for', async () => {
