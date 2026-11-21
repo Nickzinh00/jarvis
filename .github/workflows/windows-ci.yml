@@ -30,6 +30,19 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Parse Windows PowerShell helpers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @('install-windows.ps1', 'start-windows.ps1', 'configure-provider.ps1', 'install-ollama.ps1')
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$file has PowerShell syntax errors: $($errors -join '; ')" }
+            Write-Host "PowerShell syntax OK: $file"
+          }
+
       - name: Production build
         run: npm run build
 
