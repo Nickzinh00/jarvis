@@ -243,11 +243,25 @@ function htmlText(value) {
   return String(value || '').replace(/<[^>]*>/g, '').trim()
 }
 
-function makeToolMessage(id, result) {
-  const content = [{ type: 'text', text: String(result.text || 'Tool completed.').slice(0, MAX_TOOL_RESULT) }]
-  if (result.image) content.push({ type: 'image_url', image_url: { url: result.image } })
-  for (const image of result.images || []) content.push({ type: 'image_url', image_url: { url: image } })
-  return { role: 'tool', tool_call_id: id, content }
+function makeToolMessages(id, result) {
+  const messages = [{
+    role: 'tool',
+    tool_call_id: id,
+    content: String(result.text || 'Tool completed.').slice(0, MAX_TOOL_RESULT),
+  }]
+  const images = [result.image, ...(result.images || [])].filter(
+    (value) => typeof value === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(value),
+  )
+  if (images.length) {
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'The previous tool returned the following image(s). Analyze them in the context of the original request.' },
+        ...images.map((url) => ({ type: 'image_url', image_url: { url } })),
+      ],
+    })
+  }
+  return messages
 }
 
 async function executeNative(name, args, ctx) {
@@ -447,7 +461,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
             try {
               const output = await executeTool(call, context)
               if (closed || activeAbort !== controller || controller.signal.aborted) return
-              history.push(makeToolMessage(call.id, output))
+              history.push(...makeToolMessages(call.id, output))
             } catch (err) {
               if (closed || activeAbort !== controller || controller.signal.aborted) return
               history.push({ role: 'tool', tool_call_id: call.id, content: 'Tool error: ' + (err?.message || err) })
