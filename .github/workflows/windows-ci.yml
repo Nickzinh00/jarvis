@@ -1,3 +1,4 @@
+# Release branch build: publish the Windows installer only for the marked commit.
 name: Windows desktop build and verification
 
 on:
