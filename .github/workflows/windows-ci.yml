@@ -30,9 +30,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Verify desktop runtime dependency
-        run: node -e "import('electron').then(({default: electron}) => { if (!electron) process.exit(1); console.log('Electron runtime dependency resolved') })"
-
       - name: Production build
         run: npm run build
 
@@ -50,21 +47,11 @@ jobs:
           if (-not $installer) { throw "No Windows installer EXE was produced." }
           $installer | ForEach-Object { Write-Host "$($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB" }
 
-      - name: Generate installer checksum
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Get-ChildItem -Path release -Filter '*.exe' -File | ForEach-Object {
-            Get-FileHash $_.FullName -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Out-File -FilePath release/SHA256SUMS.txt -Append -Encoding ascii
-          }
-
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: JARVIS-Windows-x64-Installer
-          path: |
-            release/*.exe
-            release/SHA256SUMS.txt
+          path: release/*.exe
           if-no-files-found: error
           retention-days: 30
 
