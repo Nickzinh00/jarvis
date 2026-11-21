@@ -266,24 +266,18 @@ function htmlText(value) {
 }
 
 function makeToolMessages(id, result) {
-  const messages = [{
+  const toolMessage = {
     role: 'tool',
     tool_call_id: id,
     content: String(result.text || 'Tool completed.').slice(0, MAX_TOOL_RESULT),
-  }]
-  const images = [result.image, ...(result.images || [])].filter(
-    (value) => typeof value === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(value),
-  )
-  if (images.length) {
-    messages.push({
-      role: 'user',
-      content: [
-        { type: 'text', text: 'The previous tool returned the following image(s). Analyze them in the context of the original request.' },
-        ...images.map((url) => ({ type: 'image_url', image_url: { url } })),
-      ],
-    })
   }
-  return messages
+  const images = [result.image, ...(result.images || [])].filter(
+    (value) =>
+      typeof value === 'string' &&
+      value.length <= 8 * 1024 * 1024 &&
+      /^data:image\/(png|jpeg|webp);base64,/i.test(value),
+  )
+  return { toolMessage, images: images.slice(0, 4) }
 }
 
 async function executeNative(name, args, ctx) {
@@ -313,6 +307,10 @@ async function executeNative(name, args, ctx) {
     if (url) {
       const issue = await fetchTargetProblem(url)
       if (issue) throw new Error('URL blocked: ' + issue)
+    }
+    for (const imageUrl of images) {
+      const issue = await fetchTargetProblem(imageUrl)
+      if (issue) throw new Error('Gallery image URL blocked: ' + issue)
     }
     send({ type: 'blade', blade: {
       id: 'b' + Date.now().toString(36), title: String(args.title || 'DISPLAY'), kind,
@@ -505,6 +503,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
         }
         if (closed || activeAbort !== controller || controller.signal.aborted) return
         if (result.toolCalls.length) {
+          const visionImages = []
           for (const call of result.toolCalls) {
             if (!call.id) call.id = 'call_' + createHash('sha1').update(JSON.stringify(call) + Date.now()).digest('hex').slice(0, 16)
           }
@@ -515,11 +514,25 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
             try {
               const output = await executeTool(call, context)
               if (closed || activeAbort !== controller || controller.signal.aborted) return
-              turnHistory.push(...makeToolMessages(call.id, output))
+              const toolResult = makeToolMessages(call.id, output)
+              turnHistory.push(toolResult.toolMessage)
+              // OpenAI-compatible APIs expect all tool results to immediately
+              // follow the assistant tool_calls message. Vision user messages
+              // are appended only after every result in this batch is present.
+              visionImages.push(...toolResult.images)
             } catch (err) {
               if (closed || activeAbort !== controller || controller.signal.aborted) return
               turnHistory.push({ role: 'tool', tool_call_id: call.id, content: 'Tool error: ' + (err?.message || err) })
             }
+          }
+          if (visionImages.length) {
+            turnHistory.push({
+              role: 'user',
+              content: [
+                { type: 'text', text: 'The previous tool call batch returned image(s). Analyze them in the context of the original request.' },
+                ...visionImages.slice(0, 8).map((url) => ({ type: 'image_url', image_url: { url } })),
+              ],
+            })
           }
           continue
         }
