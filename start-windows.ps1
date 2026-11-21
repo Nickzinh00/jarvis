@@ -3,7 +3,6 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw "Node.js não encontrado. Execute install-windows.ps1." }
 if (-not (Test-Path (Join-Path $root "node_modules"))) { throw "Dependências ausentes. Execute install-windows.ps1." }
-if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { throw "Claude Code não encontrado. Execute install-windows.ps1." }
 
 $env:JARVIS_BRIDGE_HOST = "127.0.0.1"
 $env:PORT = "5173"
