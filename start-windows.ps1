@@ -20,17 +20,32 @@ try {
   $deadline = (Get-Date).AddSeconds(90)
   $opened = $false
   while (-not $process.HasExited) {
-    if (Test-Path $logOut) { Get-Content $logOut -Tail 8 | ForEach-Object { Write-Host $_ } }
+    $recentOutput = @()
+    if (Test-Path $logOut) {
+      $recentOutput = @(Get-Content $logOut -Tail 25)
+      $recentOutput | ForEach-Object { Write-Host $_ }
+    }
     if (Test-Path $logErr) { Get-Content $logErr -Tail 8 | ForEach-Object { Write-Host $_ -ForegroundColor Yellow } }
     if (-not $opened -and (Get-Date) -lt $deadline) {
-      try {
-        $response = Invoke-WebRequest -Uri "http://127.0.0.1:5173" -TimeoutSec 2 -UseBasicParsing
-        if ($response.StatusCode -eq 200) {
-          if ($browser) { Start-Process -FilePath $browser -ArgumentList "http://localhost:5173" } else { Start-Process "http://localhost:5173" }
-          $opened = $true
-          Write-Host "JARVIS disponível no navegador." -ForegroundColor Green
+      # Vite may select 5174-5199 if 5173 is already in use. Read the actual
+      # local URL from Vite output rather than assuming the default port.
+      $appUrl = $null
+      foreach ($line in $recentOutput) {
+        if ($line -match 'http://localhost:(\d+)') {
+          $appUrl = "http://localhost:$($matches[1])"
+          break
         }
-      } catch {}
+      }
+      if ($appUrl) {
+        try {
+          $response = Invoke-WebRequest -Uri $appUrl -TimeoutSec 2 -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            if ($browser) { Start-Process -FilePath $browser -ArgumentList $appUrl } else { Start-Process $appUrl }
+            $opened = $true
+            Write-Host "JARVIS disponível no navegador: $appUrl" -ForegroundColor Green
+          }
+        } catch {}
+      }
     }
     Start-Sleep -Seconds 2
     $process.Refresh()
