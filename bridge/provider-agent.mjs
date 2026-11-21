@@ -265,7 +265,7 @@ function htmlText(value) {
   return String(value || '').replace(/<[^>]*>/g, '').trim()
 }
 
-function makeToolMessages(id, result) {
+export function makeToolMessages(id, result) {
   const toolMessage = {
     role: 'tool',
     tool_call_id: id,
