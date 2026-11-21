@@ -39,7 +39,8 @@ try {
   if ($process.ExitCode -ne 0) { throw "JARVIS encerrou com código $($process.ExitCode). Consulte os logs acima." }
 } finally {
   if (-not $process.HasExited) {
-    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    # Terminate the complete Node/Vite/bridge process tree so no child is left behind.
+    & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
     Start-Sleep -Milliseconds 500
   }
 }
