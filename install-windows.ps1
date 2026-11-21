@@ -11,15 +11,19 @@ Write-Host "J.A.R.V.I.S. — instalação guiada para Windows" -ForegroundColor 
 Write-Host "O instalador não solicita nem envia suas senhas ou chaves."
 if (-not (Test-Command "node")) {
   Write-Step "Instalando Node.js LTS oficial via winget."
-  if (-not (Test-Command "winget")) { throw "Instale Node.js 20+ pelo site https://nodejs.org/ e execute novamente." }
+  if (-not (Test-Command "winget")) { throw "Instale Node.js 20.19+ pelo site https://nodejs.org/ e execute novamente." }
   winget install --id OpenJS.NodeJS.LTS --exact --source winget --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -ne 0) { throw "A instalação do Node.js falhou (código $LASTEXITCODE)." }
   $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
   if (-not (Test-Command "node")) { throw "Node.js instalado. Feche e reabra o PowerShell e execute novamente." }
 }
-$nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
-if ($nodeMajor -lt 20) { throw "Node.js 20+ é obrigatório. Detectado: $(node --version)" }
+$nodeVersion = [version](node -p "process.versions.node")
+$minimumNode = [version]"20.19.0"
+if ($nodeVersion -lt $minimumNode) {
+  throw "Este projeto precisa de Node.js 20.19 ou mais recente. Detectado: $nodeVersion. Atualize em https://nodejs.org/ e execute novamente."
+}
 Write-Step "Instalando dependências exatas do projeto."
-npm ci
+npm install --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw "npm ci falhou. Confira a conexão e tente novamente." }
 Write-Step "Executando diagnóstico inicial."
 npm run setup
