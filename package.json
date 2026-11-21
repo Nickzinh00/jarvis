@@ -1,7 +1,7 @@
 {
   "name": "jarvis",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "J.A.R.V.I.S. desktop voice assistant with 3D HUD, local bridge, multi-provider AI and MCP tools.",
   "license": "MIT",
   "type": "module",
