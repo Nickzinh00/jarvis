@@ -1,11 +1,90 @@
+param(
+  [ValidateSet("qwen3-vl:2b", "qwen3-vl:4b")]
+  [string]$Model = "qwen3-vl:4b"
+)
 $ErrorActionPreference = "Stop"
-if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-  throw "winget não está disponível. Instale o Ollama pelo site oficial: https://ollama.com/download/windows"
+
+function Resolve-OllamaPath {
+  $command = Get-Command ollama -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+  $candidates = @(
+    (Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"),
+    (Join-Path $env:ProgramFiles "Ollama\ollama.exe")
+  )
+  foreach ($candidate in $candidates) { if (Test-Path $candidate) { return $candidate } }
+  return $null
 }
-if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
+
+Write-Host ""
+Write-Host "J.A.R.V.I.S. — configuração da IA local" -ForegroundColor Cyan
+Write-Host "Ollama executa o modelo neste computador; não usa o limite do plano Claude."
+Write-Host "Modelo padrão: qwen3-vl:4b (aprox. 3,3 GB). Alternativa menor: qwen3-vl:2b (aprox. 1,9 GB)."
+Write-Host ""
+
+$ollama = Resolve-OllamaPath
+if (-not $ollama) {
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    throw "winget não está disponível. Instale Ollama pelo instalador oficial: https://ollama.com/download/windows"
+  }
+  Write-Host "Instalando Ollama para Windows via winget..." -ForegroundColor Yellow
   winget install --id Ollama.Ollama --exact --source winget --accept-package-agreements --accept-source-agreements
-  if ($LASTEXITCODE -ne 0) { throw "A instalação do Ollama falhou." }
+  if ($LASTEXITCODE -ne 0) { throw "A instalação do Ollama falhou (código $LASTEXITCODE)." }
+  $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+  $ollama = Resolve-OllamaPath
 }
-Write-Host "Ollama instalado. Para instalar um modelo local multimodal com ferramentas, execute:" -ForegroundColor Green
-Write-Host "  ollama pull qwen3-vl:4b"
-Write-Host "O download pode ocupar vários GB. O desempenho depende da memória e da GPU."
+if (-not $ollama) { throw "Ollama foi instalado, mas ollama.exe não foi encontrado. Reinicie o Windows e tente novamente." }
+
+# The desktop app normally starts the local service. Start it when this helper
+# is run before the first JARVIS launch.
+try {
+  & $ollama list *> $null
+} catch {}
+if ($LASTEXITCODE -ne 0) {
+  $app = Join-Path (Split-Path $ollama -Parent) "Ollama.exe"
+  if (Test-Path $app) { Start-Process -FilePath $app }
+  $ready = $false
+  for ($i = 0; $i -lt 30; $i++) {
+    Start-Sleep -Seconds 1
+    & $ollama list *> $null
+    if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+  }
+  if (-not $ready) { throw "Ollama não iniciou. Abra o aplicativo Ollama e execute este assistente novamente." }
+}
+
+Write-Host ""
+Write-Host "Baixando $Model. O download pode ocupar alguns GB e levar algum tempo." -ForegroundColor Yellow
+& $ollama pull $Model
+if ($LASTEXITCODE -ne 0) { throw "O download do modelo falhou (código $LASTEXITCODE). Confira a conexão e o espaço em disco." }
+
+# Switch to local-first mode while preserving a previously configured cloud
+# provider as the automatic fallback when it has a complete API configuration.
+$folder = Join-Path $HOME ".jarvis"
+$file = Join-Path $folder "provider.json"
+New-Item -ItemType Directory -Force -Path $folder | Out-Null
+$settings = @{}
+if (Test-Path $file) {
+  try { $settings = Get-Content $file -Raw | ConvertFrom-Json -AsHashtable } catch { $settings = @{} }
+}
+$currentProvider = [string]$settings.provider
+if ($currentProvider -and $currentProvider -notin @("auto", "ollama", "claude") -and $settings.apiKey -and $settings.model -and $settings.baseUrl) {
+  $settings.fallback = @{
+    provider = $currentProvider
+    model = [string]$settings.model
+    baseUrl = [string]$settings.baseUrl
+    apiKey = [string]$settings.apiKey
+  }
+}
+$settings.provider = "auto"
+$settings.baseUrl = "http://127.0.0.1:11434/v1"
+$settings.model = $Model
+$settings.apiKey = "ollama"
+$settings | ConvertTo-Json -Depth 8 | Set-Content -Path $file -Encoding UTF8
+try {
+  $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+  & icacls.exe $file /inheritance:r /grant:r "$($identity):(F)" | Out-Null
+} catch { Write-Warning "Não foi possível ajustar permissões avançadas; mantenha esta pasta protegida no seu perfil do Windows." }
+
+Write-Host ""
+Write-Host "Tudo pronto. O JARVIS está configurado para usar $Model localmente." -ForegroundColor Green
+Write-Host "Reabra J.A.R.V.I.S. para aplicar a configuração."
+Write-Host "A IA local usa recursos do seu PC; velocidade e qualidade variam conforme o hardware."
