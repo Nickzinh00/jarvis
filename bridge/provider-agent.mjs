@@ -61,7 +61,7 @@ export function readProviderConfig(env = process.env) {
 export async function resolveProviderConfig(config = readProviderConfig(), fetchImpl = fetch) {
   if (config.provider !== 'auto') return config
 
-  const localBase = String(config.baseUrl || DEFAULT_OLLAMA).replace(/\\/v1\\/?$/, '')
+  const localBase = String(config.baseUrl || DEFAULT_OLLAMA).replace(/\/v1\/?$/, '')
   try {
     const response = await fetchImpl(localBase + '/api/tags', { signal: AbortSignal.timeout(1800) })
     if (response.ok) {
