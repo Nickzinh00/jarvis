@@ -10,6 +10,7 @@ import { probeUrl } from './page.mjs'
 
 const SETTINGS_FILE = join(homedir(), '.jarvis', 'provider.json')
 const DEFAULT_OLLAMA = 'http://127.0.0.1:11434/v1'
+const DEFAULT_LOCAL_MODEL = 'qwen3-vl:4b'
 const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_RESULT = 16000
 const PROVIDERS = {
@@ -54,7 +55,7 @@ export function readProviderConfig(env = process.env) {
     fallback: saved.fallback || null,
     baseUrl: String(env.JARVIS_BASE_URL || saved.baseUrl || defaults.baseUrl || '').trim().replace(/\/+$/, ''),
     apiKey: String(env.JARVIS_API_KEY || saved.apiKey || defaults.apiKey || '').trim(),
-    model: String(env.JARVIS_MODEL_NAME || saved.model || (['ollama', 'auto'].includes(provider) ? 'llama3.1' : '')).trim(),
+    model: String(env.JARVIS_MODEL_NAME || saved.model || (['ollama', 'auto'].includes(provider) ? DEFAULT_LOCAL_MODEL : '')).trim(),
   }
 }
 
@@ -67,7 +68,7 @@ export async function resolveProviderConfig(config = readProviderConfig(), fetch
     if (response.ok) {
       const payload = await response.json()
       const modelNames = (payload.models || []).map((item) => String(item.name || item.model || ''))
-      const requested = String(config.model || 'llama3.1')
+      const requested = String(config.model || DEFAULT_LOCAL_MODEL
       const installed = modelNames.some((name) =>
         name === requested || name.startsWith(requested + ':') || requested.startsWith(name + ':'),
       )
