@@ -1153,7 +1153,7 @@ wss.on('connection', (socket) => {
   // Answer the HUD straight away rather than making it wait for the agent's
   // first turn. Refined later by the real init message.
   socket.send(
-    JSON.stringify({ type: 'ready', servers: Object.keys(MCP_SERVERS) }),
+    JSON.stringify({ type: 'ready', servers: Object.keys(MCP_SERVERS), provider: 'claude', model: MODEL }),
   )
 
   /** Resolves the pending user message into the SDK's input generator. */
@@ -1534,7 +1534,7 @@ wss.on('connection', (socket) => {
               const usable = (msg.mcp_servers ?? [])
                 .filter((s) => s.status !== 'needs-auth' && s.status !== 'failed')
                 .map((s) => s.name)
-              send({ type: 'ready', servers: usable })
+              send({ type: 'ready', servers: usable, provider: 'claude', model: MODEL })
               console.log(`[jarvis] ${usable.length} MCP servers available`)
             }
             break
