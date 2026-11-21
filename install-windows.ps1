@@ -18,11 +18,6 @@ if (-not (Test-Command "node")) {
 }
 $nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
 if ($nodeMajor -lt 20) { throw "Node.js 20+ é obrigatório. Detectado: $(node --version)" }
-if (-not (Test-Command "claude")) {
-  Write-Step "Instalando Claude Code."
-  npm install --global @anthropic-ai/claude-code
-}
-if (-not (Test-Command "claude")) { throw "Claude Code não foi localizado. Reinicie o PowerShell e tente novamente." }
 Write-Step "Instalando dependências exatas do projeto."
 npm ci
 if ($LASTEXITCODE -ne 0) { throw "npm ci falhou. Confira a conexão e tente novamente." }
@@ -31,6 +26,7 @@ npm run setup
 if ($LASTEXITCODE -ne 0) { throw "A verificação inicial falhou." }
 Write-Host ""
 Write-Host "Instalação concluída." -ForegroundColor Green
-Write-Host "PRÓXIMO PASSO: execute claude e conclua o login oficial da sua conta."
+Write-Host "O mecanismo de IA padrão é Ollama local. Use o menu/instalador de Ollama e baixe qwen3-vl:4b."
+Write-Host "Também é possível configurar provedores cloud compatíveis no menu."
 Write-Host "Depois, inicie o JARVIS com start-windows.bat."
 Write-Host "A proteção padrão contra alterações continua ativa."
