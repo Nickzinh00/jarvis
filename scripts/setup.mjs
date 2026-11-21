@@ -7,8 +7,8 @@ import { join } from 'node:path'
 
 const say = (tag, message) => console.log('[' + tag + '] ' + message)
 const providerPath = join(homedir(), '.jarvis', 'provider.json')
-let provider = 'ollama'
-let model = 'llama3.1'
+let provider = 'auto'
+let model = 'qwen3-vl:4b'
 let configured = false
 try {
   const saved = JSON.parse(readFileSync(providerPath, 'utf8'))
@@ -24,7 +24,7 @@ const major = Number(process.versions.node.split('.')[0])
 say(major >= 20 ? 'OK' : 'WARN', 'Node.js ' + process.versions.node + (major >= 20 ? '' : ' (20+ required for source development).'))
 say('INFO', 'Selected provider: ' + provider + (model ? ' / ' + model : '') + (configured ? '' : ' (default; configure it from the desktop menu).'))
 
-if (provider === 'ollama') {
+if (provider === 'ollama' || provider === 'auto') {
   const found = spawnSync('ollama', ['--version'], { encoding: 'utf8', timeout: 8000 })
   if (found.status === 0) {
     say('OK', 'Ollama is installed: ' + (found.stdout || found.stderr || '').trim())
@@ -35,7 +35,7 @@ if (provider === 'ollama') {
       say('WARN', 'Model ' + model + ' was not found in ollama list. Run: ollama pull ' + model)
     }
   } else {
-    say('WARN', 'Ollama is not installed. Use the desktop menu to install Ollama, then download a model.')
+    say('WARN', 'Ollama is not installed. Use the desktop menu to install Ollama and download qwen3-vl:4b (about 3.3 GB).')
   }
 } else if (provider !== 'claude') {
   say('INFO', 'Cloud provider selected. Ensure its API key, model name and account billing are valid.')
