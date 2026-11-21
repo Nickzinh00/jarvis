@@ -320,6 +320,16 @@ export function providerNativeTools(allowWrites = false) {
   return { tools, toolMap }
 }
 
+export function restrictToolRegistries(tools, ...registries) {
+  const exposed = new Set(tools.map((item) => item.function.name))
+  for (const registry of registries) {
+    for (const name of registry.keys()) {
+      if (!exposed.has(name)) registry.delete(name)
+    }
+  }
+  return tools
+}
+
 function htmlText(value) {
   return String(value || '').replace(/<[^>]*>/g, '').trim()
 }
@@ -543,7 +553,11 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
   const mcp = await connectMcpServers(allowWrites)
   const nativeSet = providerNativeTools(allowWrites)
   const nativeToolMap = nativeSet.toolMap
-  const tools = [...nativeSet.tools, ...mcp.tools].slice(0, 120)
+  const tools = restrictToolRegistries(
+    [...nativeSet.tools, ...mcp.tools].slice(0, 120),
+    nativeToolMap,
+    mcp.toolMap,
+  )
   send({ type: 'ready', servers: ['local-tools', ...mcp.names], provider: config.provider, model: config.model })
 
   const history = [{ role: 'system', content: systemPrompt + COMPATIBLE_PROVIDER_GUIDANCE }]
