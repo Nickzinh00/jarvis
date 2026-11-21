@@ -20,6 +20,12 @@ Write-Host "J.A.R.V.I.S. — configuração da IA local" -ForegroundColor Cyan
 Write-Host "Ollama executa o modelo neste computador; não usa o limite do plano Claude."
 Write-Host "Modelo padrão: qwen3-vl:4b (aprox. 3,3 GB). Alternativa menor: qwen3-vl:2b (aprox. 1,9 GB)."
 Write-Host ""
+if (-not $PSBoundParameters.ContainsKey("Model")) {
+  Write-Host "1 - qwen3-vl:4b (melhor equilíbrio; 3,3 GB)"
+  Write-Host "2 - qwen3-vl:2b (menor e mais leve; 1,9 GB)"
+  $selection = Read-Host "Escolha o modelo (Enter = 1)"
+  if ($selection -eq "2") { $Model = "qwen3-vl:2b" }
+}
 
 $ollama = Resolve-OllamaPath
 if (-not $ollama) {
