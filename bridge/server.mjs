@@ -16,6 +16,7 @@
  */
 
 import { WebSocketServer } from 'ws'
+import { startCompatibleSession, readProviderConfig } from './provider-agent.mjs'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { displayServer } from './panels.mjs'
 import { uiServer } from './ui.mjs'
@@ -742,7 +743,8 @@ const handleRequest = async (req, res) => {
     // student with nothing configured still has a working assistant.
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven }))
+    const provider = readProviderConfig()
+    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, provider: provider.provider, model: provider.model }))
   }
 
   // Serve local image files to the page. Screenshots and generated art land on
@@ -1086,7 +1088,10 @@ if (!LOOPBACK) {
 console.log(
   `[jarvis] speech ${elevenKey() ? 'via ElevenLabs (key from MCP config)' : 'using browser fallback voice'}`,
 )
-console.log(`[jarvis] model ${MODEL} · effort ${EFFORT}`)
+const selectedProvider = readProviderConfig()
+console.log(selectedProvider.provider === 'claude'
+  ? `[jarvis] provider Claude Agent SDK · model ${MODEL} · effort ${EFFORT}`
+  : `[jarvis] provider ${selectedProvider.provider} · model ${selectedProvider.model || '(not configured)'} · endpoint ${selectedProvider.baseUrl}`)
 console.log(
   `[jarvis] MCP servers from config: ${Object.keys(MCP_SERVERS).join(', ') || 'none'}` +
     (ACCOUNT_CONNECTORS ? ' · account connectors ON' : ' · account connectors off'),
@@ -1127,7 +1132,23 @@ const RESULT_FAILURES = {
 }
 
 wss.on('connection', (socket) => {
-  console.log('[jarvis] client connected')
+  const selectedProvider = readProviderConfig()
+  if (selectedProvider.provider !== 'claude') {
+    console.log(`[jarvis] client connected · ${selectedProvider.provider} provider`)
+    void startCompatibleSession(socket, {
+      systemPrompt: SYSTEM_PROMPT,
+      allowWrites: ALLOW_WRITES,
+      workspace: WORKSPACE,
+    }).catch((err) => {
+      console.error('[jarvis] provider session could not start:', err)
+      if (socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify({ type: 'error', message: String(err?.message ?? err) }))
+        socket.close()
+      }
+    })
+    return
+  }
+  console.log('[jarvis] client connected · Claude Agent SDK')
 
   // Answer the HUD straight away rather than making it wait for the agent's
   // first turn. Refined later by the real init message.
