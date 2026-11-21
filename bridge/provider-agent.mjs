@@ -450,18 +450,41 @@ async function executeTool(call, ctx) {
   return { text: (texts.join('\n') || 'Tool completed.').slice(0, MAX_TOOL_RESULT), images }
 }
 
-async function streamCompletion(config, messages, tools, signal, onText) {
+export async function streamCompletion(config, messages, tools, signal, onText, fetchImpl = fetch) {
   if (config.error) throw new Error(config.error)
   if (!config.baseUrl) throw new Error('No provider URL is configured. Open the JARVIS provider settings.')
   if (!config.model) throw new Error('No model is configured. Run configure-provider.ps1 and select a supported model.')
   if (config.provider !== 'ollama' && !config.apiKey) throw new Error('This cloud provider requires an API key. Configure it locally on this PC.')
-  const response = await fetch(openAIEndpoint(config.baseUrl), {
+  const response = await fetchImpl(openAIEndpoint(config.baseUrl), {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(config.apiKey ? { authorization: 'Bearer ' + config.apiKey } : {}) },
     body: JSON.stringify({ model: config.model, messages, tools: tools.length ? tools : undefined, tool_choice: tools.length ? 'auto' : undefined, stream: true, temperature: 0.4 }),
     signal,
   })
   if (!response.ok) throw new Error(config.provider + ' returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 2000))
+  const contentType = response.headers?.get?.('content-type') || ''
+  if (contentType.includes('application/json')) {
+    const payload = await response.json()
+    const message = payload.choices?.[0]?.message || payload.message || {}
+    const rawContent = message.content
+    const content = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.filter((part) => part?.type === 'text').map((part) => part.text || '').join('')
+        : ''
+    if (content) onText(content)
+    const toolCalls = (message.tool_calls || []).map((call) => ({
+      id: call.id || '',
+      type: 'function',
+      function: {
+        name: call.function?.name || '',
+        arguments: typeof call.function?.arguments === 'string'
+          ? call.function.arguments
+          : JSON.stringify(call.function?.arguments || {}),
+      },
+    }))
+    return { text: content, toolCalls }
+  }
   if (!response.body) throw new Error('The provider returned an empty response stream.')
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -498,6 +521,7 @@ async function streamCompletion(config, messages, tools, signal, onText) {
       buffer = lines.pop() || ''
       for (const line of lines) processLine(line)
     }
+    buffer += decoder.decode()
     if (buffer) processLine(buffer)
   } finally { reader.releaseLock() }
   return { text, toolCalls: [...calls.values()] }
