@@ -13,12 +13,14 @@ const DEFAULT_OLLAMA = 'http://127.0.0.1:11434/v1'
 const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_RESULT = 16000
 const PROVIDERS = {
+  auto: { baseUrl: DEFAULT_OLLAMA, apiKey: 'ollama' },
   ollama: { baseUrl: DEFAULT_OLLAMA, apiKey: 'ollama' },
   openai: { baseUrl: 'https://api.openai.com/v1' },
   openrouter: { baseUrl: 'https://openrouter.ai/api/v1' },
   groq: { baseUrl: 'https://api.groq.com/openai/v1' },
   together: { baseUrl: 'https://api.together.xyz/v1' },
   deepseek: { baseUrl: 'https://api.deepseek.com/v1' },
+  gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
   custom: { baseUrl: '' },
 }
 const mcpToolMap = new Map()
@@ -44,14 +46,44 @@ function readJson(path) {
 
 export function readProviderConfig(env = process.env) {
   const saved = readJson(SETTINGS_FILE)
-  const selected = String(env.JARVIS_PROVIDER || saved.provider || 'ollama').toLowerCase()
+  const selected = String(env.JARVIS_PROVIDER || saved.provider || 'auto').toLowerCase()
   const provider = selected === 'claude' ? 'claude' : (Object.hasOwn(PROVIDERS, selected) ? selected : 'custom')
   const defaults = PROVIDERS[provider] || {}
   return {
     provider,
+    fallback: saved.fallback || null,
     baseUrl: String(env.JARVIS_BASE_URL || saved.baseUrl || defaults.baseUrl || '').trim().replace(/\/+$/, ''),
     apiKey: String(env.JARVIS_API_KEY || saved.apiKey || defaults.apiKey || '').trim(),
     model: String(env.JARVIS_MODEL_NAME || saved.model || (provider === 'ollama' ? 'llama3.1' : '')).trim(),
+  }
+}
+
+export async function resolveProviderConfig(config = readProviderConfig(), fetchImpl = fetch) {
+  if (config.provider !== 'auto') return config
+
+  const localBase = String(config.baseUrl || DEFAULT_OLLAMA).replace(/\\/v1\\/?$/, '')
+  try {
+    const response = await fetchImpl(localBase + '/api/tags', { signal: AbortSignal.timeout(1800) })
+    if (response.ok) {
+      const payload = await response.json()
+      const modelNames = (payload.models || []).map((item) => String(item.name || item.model || ''))
+      const requested = String(config.model || 'llama3.1')
+      const installed = modelNames.some((name) =>
+        name === requested || name.startsWith(requested + ':') || requested.startsWith(name + ':'),
+      )
+      if (installed) return { ...config, provider: 'ollama', baseUrl: config.baseUrl || DEFAULT_OLLAMA, model: requested }
+    }
+  } catch {
+    // Local service unavailable: continue to the explicitly configured fallback.
+  }
+
+  const fallback = config.fallback
+  if (fallback && typeof fallback === 'object' && fallback.provider && fallback.model && fallback.baseUrl && fallback.apiKey) {
+    return { ...fallback, provider: String(fallback.provider).toLowerCase() }
+  }
+  return {
+    ...config,
+    error: 'Automatic provider selection could not find the local Ollama service and no cloud fallback is configured. Start Ollama and install the selected model, or use the JARVIS menu to add a cloud fallback.',
   }
 }
 
@@ -317,7 +349,8 @@ async function executeTool(call, ctx) {
 }
 
 async function streamCompletion(config, messages, tools, signal, onText) {
-  if (!config.baseUrl) throw new Error('No provider URL is configured. Run configure-provider.ps1.')
+  if (config.error) throw new Error(config.error)
+  if (!config.baseUrl) throw new Error('No provider URL is configured. Open the JARVIS provider settings.')
   if (!config.model) throw new Error('No model is configured. Run configure-provider.ps1 and select a supported model.')
   if (config.provider !== 'ollama' && !config.apiKey) throw new Error('This cloud provider requires an API key. Configure it locally on this PC.')
   const response = await fetch(openAIEndpoint(config.baseUrl), {
@@ -370,7 +403,7 @@ async function streamCompletion(config, messages, tools, signal, onText) {
 
 export async function startCompatibleSession(socket, { systemPrompt, allowWrites = false, workspace }) {
   const send = (message) => { if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message)) }
-  const config = readProviderConfig()
+  const config = await resolveProviderConfig()
   const roots = fileRoots({ workspace, extra: (process.env.JARVIS_FILE_ROOTS || '').split(',').map((s) => s.trim()).filter(Boolean) })
   const mcp = await connectMcpServers(allowWrites)
   const native = nativeTools().filter((item) => allowWrites || item.function.name !== 'jarvis_write_file')
@@ -479,7 +512,7 @@ export async function saveProviderConfig(config) {
   const model = String(config.model || '').trim()
   const baseUrl = String(config.baseUrl || PROVIDERS[provider]?.baseUrl || '').trim().replace(/\/+$/, '')
   const apiKey = String(config.apiKey || '').trim()
-  if (provider !== 'claude') {
+  if (provider !== 'claude' && provider !== 'auto') {
     if (!model) throw new Error('Choose a model supported by the provider.')
     if (provider !== 'ollama' && !apiKey) throw new Error('An API key is required for this cloud provider.')
     if (!baseUrl) throw new Error('Provider URL is required.')
@@ -489,7 +522,7 @@ export async function saveProviderConfig(config) {
   }
   const folder = homedir() + '/.jarvis'
   await mkdir(folder, { recursive: true })
-  const value = { provider, model, baseUrl, apiKey }
+  const value = { provider, model, baseUrl, apiKey, ...(config.fallback ? { fallback: config.fallback } : {}) }
   await writeFile(SETTINGS_FILE, JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 })
   return { provider, model, keyConfigured: Boolean(apiKey) }
 }
