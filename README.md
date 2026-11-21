@@ -25,7 +25,7 @@ Read WINDOWS.md for installation, setup and troubleshooting details.
 
 The original 3D HUD, voice pipeline, wake word, VAD, interruption/barge-in, panels/blades, camera look/watch, interface controls, local file workspace, Claude Agent SDK path and configured MCP integrations are retained. The alternative provider agent supports streaming, tool calls, built-in display/UI/camera/workspace tools and eligible configured MCP servers.
 
-Not every Claude Agent SDK-specific built-in can be reproduced identically on every provider. The original Chrome extension native-host automation remains provider-specific pending a full cross-provider port. Third-party integrations also require their own accounts and setup.
+Not every Claude Agent SDK-specific built-in can be reproduced identically on every provider. The alternative provider now reuses the original Chrome extension native-host transport for tab listing, navigation, page reading, screenshots, find, scroll, console and network diagnostics. Click/type/form input/new-tab/close-tab are exposed only when local write mode is enabled. The Chrome extension/native host must already be installed and running; this integration does not require the Claude Code subscription, but still depends on the extension being available.
 
 ## Security defaults
 
