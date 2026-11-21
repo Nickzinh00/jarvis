@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Audit dependency vulnerabilities
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
@@ -60,6 +63,15 @@ jobs:
           if (-not $installer) { throw "No Windows installer EXE was produced." }
           $installer | ForEach-Object { Write-Host "$($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB" }
 
+      - name: Create installer SHA-256 checksum
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-ChildItem -Path release -Filter "*.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "No installer available for checksum." }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Out-File -FilePath (Join-Path $installer.DirectoryName ($installer.Name + ".sha256")) -Encoding ascii
+
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
@@ -72,16 +84,18 @@ jobs:
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-release]')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
+          tag_name: v1.0.1
           target_commitish: ${{ github.sha }}
-          name: JARVIS 1.0.0 — Windows x64
+          name: JARVIS 1.0.1 — Security and chat update
           body: |
-            ## JARVIS 1.0.0 — Windows x64
+            ## JARVIS 1.0.1 — Windows x64
+
+            Security-focused update: third-party MCP servers now require an explicit allowlist; file/browser write permissions and arbitrary shell access are separate opt-ins. Includes a keyboard chat composer and dependency vulnerability audit in CI.
 
             Instalador desktop para Windows 10/11 (64 bits).
 
             ### Instalação
-            1. Baixe e execute `JARVIS-Setup-1.0.0-x64.exe`.
+            1. Baixe e execute `JARVIS-Setup-1.0.1-x64.exe`.
             2. Abra o JARVIS e use a opção de instalação do Ollama local.
             3. Escolha o modelo Qwen3-VL 4B ou 2B e conclua a configuração.
 
@@ -91,6 +105,7 @@ jobs:
             - O instalador não vem assinado por certificado comercial; o Windows pode exibir um aviso de editor desconhecido.
             - O modelo local não está incluído no instalador.
           files: release/*.exe
+            release/*.sha256
           fail_on_unmatched_files: true
           overwrite_files: true
           draft: false
