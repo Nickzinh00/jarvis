@@ -321,6 +321,71 @@ body::after {
   text-align: center;
 }
 
+.chat-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 40px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  text-transform: none;
+  letter-spacing: normal;
+  z-index: 20;
+}
+
+.chat-dock input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-radius: 7px;
+  outline: none;
+  background: rgba(2, 10, 16, 0.88);
+  color: #ecfbff;
+  font: 400 13px 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.34), 0 0 20px color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.chat-dock input::placeholder { color: rgba(205, 229, 235, 0.48); }
+.chat-dock input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent), 0 8px 28px rgba(0, 0, 0, 0.34);
+}
+.chat-dock input:disabled { opacity: 0.5; }
+
+.chat-dock button {
+  flex: 0 0 auto;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 13%, rgba(2, 10, 16, 0.96));
+  color: #eafcff;
+  font: 600 11px 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+.chat-dock button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, rgba(2, 10, 16, 0.96));
+  border-color: var(--accent);
+}
+.chat-dock button:disabled { opacity: 0.38; cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .chat-dock { width: calc(100vw - 24px); bottom: 26px; gap: 6px; }
+  .chat-dock input { height: 40px; padding: 0 10px; font-size: 12px; }
+  .chat-dock button { height: 40px; padding: 0 12px; font-size: 10px; }
+  .hud-bottom { bottom: 8px; font-size: 8px; }
+}
+
 .hud-bottom {
   position: absolute;
   bottom: 44px;
