@@ -40,8 +40,7 @@ try {
   & $ollama list *> $null
 } catch {}
 if ($LASTEXITCODE -ne 0) {
-  $app = Join-Path (Split-Path $ollama -Parent) "Ollama.exe"
-  if (Test-Path $app) { Start-Process -FilePath $app }
+  Start-Process -FilePath $ollama -ArgumentList "serve" -WindowStyle Hidden
   $ready = $false
   for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Seconds 1
@@ -63,7 +62,10 @@ $file = Join-Path $folder "provider.json"
 New-Item -ItemType Directory -Force -Path $folder | Out-Null
 $settings = @{}
 if (Test-Path $file) {
-  try { $settings = Get-Content $file -Raw | ConvertFrom-Json -AsHashtable } catch { $settings = @{} }
+  try {
+    $existing = Get-Content $file -Raw | ConvertFrom-Json
+    foreach ($property in $existing.PSObject.Properties) { $settings[$property.Name] = $property.Value }
+  } catch { $settings = @{} }
 }
 $currentProvider = [string]$settings.provider
 if ($currentProvider -and $currentProvider -notin @("auto", "ollama", "claude") -and $settings.apiKey -and $settings.model -and $settings.baseUrl) {
@@ -78,7 +80,7 @@ $settings.provider = "auto"
 $settings.baseUrl = "http://127.0.0.1:11434/v1"
 $settings.model = $Model
 $settings.apiKey = "ollama"
-$settings | ConvertTo-Json -Depth 8 | Set-Content -Path $file -Encoding UTF8
+[System.IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 8), [System.Text.UTF8Encoding]::new($false))
 try {
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
   & icacls.exe $file /inheritance:r /grant:r "$($identity):(F)" | Out-Null
