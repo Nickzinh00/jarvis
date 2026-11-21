@@ -440,6 +440,7 @@ async function streamCompletion(config, messages, tools, signal, onText) {
 export async function startCompatibleSession(socket, { systemPrompt, allowWrites = false, workspace }) {
   const send = (message) => { if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message)) }
   const config = await resolveProviderConfig()
+  let activeConfig = config
   const roots = fileRoots({ workspace, extra: (process.env.JARVIS_FILE_ROOTS || '').split(',').map((s) => s.trim()).filter(Boolean) })
   const mcp = await connectMcpServers(allowWrites)
   const native = nativeTools().filter((item) => allowWrites || item.function.name !== 'jarvis_write_file')
@@ -466,10 +467,39 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         if (closed || activeAbort !== controller || controller.signal.aborted) return
-        const result = await streamCompletion(config, history, tools, controller.signal,
-          (delta) => {
+        let emittedText = false
+        let result
+        try {
+          result = await streamCompletion(activeConfig, history, tools, controller.signal, (delta) => {
+            if (activeAbort === controller && !controller.signal.aborted) {
+              emittedText = true
+              send({ type: 'text', delta, ask: askId })
+            }
+          })
+        } catch (providerError) {
+          const fallback = activeConfig.fallback
+          if (
+            emittedText ||
+            activeConfig.provider !== 'ollama' ||
+            !fallback?.provider ||
+            !fallback?.baseUrl ||
+            !fallback?.model ||
+            !fallback?.apiKey ||
+            controller.signal.aborted
+          ) throw providerError
+
+          activeConfig = { ...fallback, provider: String(fallback.provider).toLowerCase() }
+          console.warn('[jarvis] local Ollama request failed; switching to configured cloud fallback:', providerError?.message || providerError)
+          send({
+            type: 'ready',
+            servers: ['local-tools', ...mcp.names],
+            provider: activeConfig.provider,
+            model: activeConfig.model,
+          })
+          result = await streamCompletion(activeConfig, history, tools, controller.signal, (delta) => {
             if (activeAbort === controller && !controller.signal.aborted) send({ type: 'text', delta, ask: askId })
           })
+        }
         if (closed || activeAbort !== controller || controller.signal.aborted) return
         if (result.toolCalls.length) {
           for (const call of result.toolCalls) {
@@ -492,7 +522,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
         }
         if (closed || activeAbort !== controller || controller.signal.aborted) return
         history.push({ role: 'assistant', content: result.text || '' })
-        send({ type: 'done', text: result.text || '', provider: config.provider, ask: askId })
+        send({ type: 'done', text: result.text || '', provider: activeConfig.provider, ask: askId })
         if (history.length > 30) {
           const userTurns = []
           for (let index = 1; index < history.length; index++) {
