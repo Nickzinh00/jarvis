@@ -1,4 +1,5 @@
-const { app, BrowserWindow, session, shell, dialog } = require('electron')
+const { app, BrowserWindow, session, shell, dialog, Menu } = require('electron')
+const { spawn } = require('node:child_process')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -97,6 +98,41 @@ function createWindow() {
   return mainWindow.loadURL(appOrigin)
 }
 
+function openPowerShellHelper(fileName) {
+  const helper = path.join(process.resourcesPath, fileName)
+  if (!fs.existsSync(helper)) {
+    dialog.showErrorBox('J.A.R.V.I.S.', 'O utilitário não foi incluído nesta instalação. Reinstale o JARVIS.')
+    return
+  }
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', helper], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+  })
+  child.unref()
+}
+
+function installApplicationMenu() {
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'J.A.R.V.I.S.',
+      submenu: [
+        { label: 'Configurar provedor de IA...', click: () => openPowerShellHelper('configure-provider.ps1') },
+        { label: 'Instalar Ollama local...', click: () => openPowerShellHelper('install-ollama.ps1') },
+        { type: 'separator' },
+        { label: 'Abrir pasta de trabalho', click: () => shell.openPath(process.env.JARVIS_WORKSPACE) },
+        { label: 'Documentação', click: () => shell.openPath(path.join(process.resourcesPath, 'WINDOWS.md')) },
+        { type: 'separator' },
+        { role: 'quit', label: 'Sair' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ])
+  Menu.setApplicationMenu(menu)
+}
+
 async function boot() {
   if (!fs.existsSync(path.join(DIST_ROOT, 'index.html'))) {
     throw new Error('The built JARVIS interface is missing. Reinstall the Windows application.')
@@ -136,6 +172,7 @@ if (!gotLock) {
   })
   app.whenReady().then(() => {
     app.setAppUserModelId('com.jarvis.desktop')
+    installApplicationMenu()
     return boot()
   }).catch((error) => {
     console.error('[JARVIS desktop] startup failed:', error)
