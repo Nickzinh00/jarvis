@@ -24,6 +24,27 @@ const PROVIDERS = {
   gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
   custom: { baseUrl: '' },
 }
+const COMPATIBLE_PROVIDER_GUIDANCE = `
+IMPORTANT: THIS SESSION USES THE JARVIS MULTI-PROVIDER ENGINE, NOT THE CLAUDE AGENT SDK.
+Only the jarvis_* tools and the MCP tools actually listed to you are available. Never claim a tool succeeded unless its result confirms it.
+
+DISPLAY AND UI:
+- Use jarvis_display to compose visible HTML on a blade.
+- Use jarvis_blade for articles, images, galleries, video, embeds, markup, and kind camera.
+- Use jarvis_ui with op patch, orbit, effect, screen, or reset to change the HUD.
+- Public search is jarvis_web_search. Open a discovered public article with jarvis_open_url or jarvis_blade.
+- The original chrome_* native-host tools are not available in this provider mode unless a configured MCP server actually exposes equivalent tools. Never claim access to the user's signed-in Chrome tabs.
+
+CAMERA:
+- Use jarvis_look for one frame and jarvis_watch for a short live watch, only when asked.
+- Use jarvis_blade with kind camera when the user asks to see the live camera or wants recent-past buffering. This visibly opens the camera blade and its indicator.
+- Reviewing the recent past requires the camera blade to have been open and buffering at that time. Do not claim past footage exists otherwise.
+
+FILES AND INTEGRATIONS:
+- Workspace files are available through jarvis_read_file and jarvis_list_files. jarvis_write_file is exposed only when local write mode is enabled; never claim to have edited a file if the tool is absent or blocked.
+- Configured MCP integrations may expose more services. Use only their tools that are actually present.
+`
+
 const mcpToolMap = new Map()
 const nativeToolMap = new Map()
 
@@ -214,7 +235,7 @@ function nativeTools() {
     ['jarvis_web_search', 'Search public web results and return real titles, URLs and snippets.', schema({ query: { type: 'string' } }, ['query'])],
     ['jarvis_open_url', 'Inspect and open a public article on the JARVIS display.', schema({ url: { type: 'string' }, title: { type: 'string' } }, ['url'])],
     ['jarvis_display', 'Show composed HTML on the JARVIS blade display. Use plain HTML and .hud-* classes.', schema({ title: { type: 'string' }, html: { type: 'string' }, hold: { type: 'string', enum: ['turn', 'sticky'] } }, ['title', 'html'])],
-    ['jarvis_blade', 'Open an article, image, video, gallery or markup on the JARVIS blades.', schema({ title: { type: 'string' }, kind: { type: 'string', enum: ['article', 'image', 'gallery', 'video', 'embed', 'markup'] }, url: { type: 'string' }, images: { type: 'array', items: { type: 'string' } }, html: { type: 'string' }, mode: { type: 'string', enum: ['reader', 'live'] }, size: { type: 'string', enum: ['compact', 'tall', 'wide', 'full'] }, hold: { type: 'string', enum: ['turn', 'sticky'] } }, ['title', 'kind'])],
+    ['jarvis_blade', 'Open an article, image, video, gallery or markup on the JARVIS blades.', schema({ title: { type: 'string' }, kind: { type: 'string', enum: ['article', 'image', 'gallery', 'video', 'embed', 'markup', 'camera'] }, url: { type: 'string' }, images: { type: 'array', items: { type: 'string' } }, html: { type: 'string' }, mode: { type: 'string', enum: ['reader', 'live'] }, size: { type: 'string', enum: ['compact', 'tall', 'wide', 'full'] }, hold: { type: 'string', enum: ['turn', 'sticky'] } }, ['title', 'kind'])],
     ['jarvis_ui', 'Control the JARVIS interface using patch, orbit, effect, screen or reset operations.', schema({ op: { type: 'string', enum: ['patch', 'orbit', 'effect', 'screen', 'reset'] }, args: { type: 'object', additionalProperties: true } }, ['op'])],
     ['jarvis_look', 'Use the camera only when the user asks you to look at something.', schema({ reason: { type: 'string' } })],
     ['jarvis_watch', 'Watch a short camera clip only after the user explicitly asks.', schema({ seconds: { type: 'integer', minimum: 2, maximum: 15 }, when: { type: 'string', enum: ['now', 'past'] }, reason: { type: 'string' } })],
@@ -425,7 +446,7 @@ export async function startCompatibleSession(socket, { systemPrompt, allowWrites
   const tools = [...native, ...mcp.tools].slice(0, 120)
   send({ type: 'ready', servers: ['local-tools', ...mcp.names], provider: config.provider, model: config.model })
 
-  const history = [{ role: 'system', content: systemPrompt }]
+  const history = [{ role: 'system', content: systemPrompt + COMPATIBLE_PROVIDER_GUIDANCE }]
   let activeAbort = null
   let closed = false
   let sequence = 0
