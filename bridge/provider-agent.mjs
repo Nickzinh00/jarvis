@@ -68,7 +68,7 @@ export async function resolveProviderConfig(config = readProviderConfig(), fetch
     if (response.ok) {
       const payload = await response.json()
       const modelNames = (payload.models || []).map((item) => String(item.name || item.model || ''))
-      const requested = String(config.model || DEFAULT_LOCAL_MODEL
+      const requested = String(config.model || DEFAULT_LOCAL_MODEL)
       const installed = modelNames.some((name) =>
         name === requested || name.startsWith(requested + ':') || requested.startsWith(name + ':'),
       )
