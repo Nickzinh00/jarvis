@@ -15,8 +15,9 @@ The desktop installer bundles Electron/Chromium, the built interface, the local 
 Open the J.A.R.V.I.S. menu and choose **Configurar provedor de IA...**.
 
 Available choices:
+- Automatic: first checks the configured local Ollama model, then uses a cloud fallback you set up if the local service/model is unavailable.
 - Ollama local: no cloud API key or Claude subscription. Install Ollama, then download a model that supports chat and tool calling. The default example is llama3.1.
-- OpenAI API, OpenRouter, Groq, Together AI, DeepSeek API, or a custom OpenAI-compatible endpoint: enter an exact model ID and your own provider API key. Cloud APIs may bill usage separately.
+- OpenAI API, OpenRouter, Groq, Together AI, DeepSeek API, Google Gemini API, or a custom OpenAI-compatible endpoint: enter an exact model ID and your own provider API key. Cloud APIs may bill usage separately.
 - Claude Agent SDK remains selectable for users who have a working Claude Code login.
 
 The local model is not bundled into the installer. Model files can take multiple gigabytes and performance depends on available RAM, storage and GPU.
