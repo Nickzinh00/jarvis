@@ -150,14 +150,14 @@ function hostAllowed(host) {
  * Voice is a bad interface for a confirmation dialog: there is no window to
  * click and the model can't pause for one. So the bridge decides.
  *
- * Read-only and generative tools run freely. Anything that writes to disk,
- * runs a shell, or changes the world waits for JARVIS_ALLOW_WRITES=1 (or the
- * --writes flag, which `npm run bridge:writes` passes — a flag works in every
- * shell, where an inline env assignment does not run on Windows). Start
- * without it, and turn it on once you trust what you're demoing.
+ * Read-only and generative tools run freely. Workspace file writes and browser
+ * interactions require JARVIS_ALLOW_WRITES=1 (or --writes). Arbitrary shell
+ * commands require BOTH that switch and JARVIS_ALLOW_SHELL=1. Keep the shell
+ * disabled unless a task truly needs it; shell access can affect the whole PC.
  */
 const ALLOW_WRITES =
   process.env.JARVIS_ALLOW_WRITES === '1' || process.argv.includes('--writes')
+const ALLOW_SHELL = process.env.JARVIS_ALLOW_SHELL === '1'
 
 /**
  * Built-in capabilities to leave out entirely: `browser` (the user's own
@@ -236,17 +236,13 @@ function configuredServers() {
  * Every server in your Claude Code config is a server a voice agent that reads
  * the open web can be talked into calling, so "all of them" is a poor default
  * for anyone whose config has grown. JARVIS_MCP_SERVERS names the ones to hand
- * over, comma separated; unset keeps the old behaviour of passing everything
- * configured, and an empty value passes none.
+ * over, comma separated. The default is none. Use `*` only when you explicitly
+ * trust every configured server.
  */
 function allowedServers(all, list) {
-  if (list === undefined) return all
-  const wanted = new Set(
-    list
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  )
+  if (typeof list !== 'string' || !list.trim()) return {}
+  const wanted = new Set(list.split(',').map((s) => s.trim()).filter(Boolean))
+  if (wanted.has('*')) return all
   return Object.fromEntries(Object.entries(all).filter(([name]) => wanted.has(name)))
 }
 
@@ -271,7 +267,7 @@ const ACCOUNT_CONNECTORS = process.env.JARVIS_ACCOUNT_CONNECTORS === '1'
  * The tool policy lives in policy.mjs so it can be tested on its own. Bound to
  * this process's write setting once, so everything below reads as before.
  */
-const decideTool = (name) => decidePolicy(name, ALLOW_WRITES)
+const decideTool = (name) => decidePolicy(name, ALLOW_WRITES, ALLOW_SHELL)
 
 /**
  * The agent's working directory, and the only folder its file tools may use
@@ -304,6 +300,7 @@ const TOOL_ROOTS = fileRoots({
 const enforcePolicy = async (input) => {
   const verdict = checkToolUse(input.tool_name, input.tool_input, {
     allowWrites: ALLOW_WRITES,
+    allowShell: ALLOW_SHELL,
     cwd: WORKSPACE,
     roots: TOOL_ROOTS,
   })
@@ -1097,9 +1094,10 @@ console.log(
     (ACCOUNT_CONNECTORS ? ' · account connectors ON' : ' · account connectors off'),
 )
 console.log(
-  `[jarvis] writes ${ALLOW_WRITES ? 'ENABLED' : 'disabled'}` +
-    (ALLOW_WRITES ? '' : ' — set JARVIS_ALLOW_WRITES=1 to permit shell/file/device actions'),
+  `[jarvis] file/browser writes ${ALLOW_WRITES ? 'ENABLED' : 'disabled'}` +
+    (ALLOW_WRITES ? '' : ' — set JARVIS_ALLOW_WRITES=1 to permit workspace edits and browser actions'),
 )
+console.log(`[jarvis] shell ${ALLOW_WRITES && ALLOW_SHELL ? 'ENABLED' : 'disabled'} — requires JARVIS_ALLOW_WRITES=1 and JARVIS_ALLOW_SHELL=1`)
 // Asynchronous, so it lands a beat after the rest of the banner. Worth printing
 // at all because an extension that is simply not running is indistinguishable
 // at the tool boundary from one that is broken, and this is the one place the
@@ -1352,7 +1350,7 @@ wss.on('connection', (socket) => {
       cwd: WORKSPACE,
       // Only the built-ins JARVIS uses. Everything else is not merely denied
       // but absent from the model's context. See builtinTools in policy.mjs.
-      tools: builtinTools(ALLOW_WRITES),
+      tools: builtinTools(ALLOW_WRITES, ALLOW_SHELL),
       hooks: { PreToolUse: [{ hooks: [enforcePolicy] }] },
       // No filesystem settings at all. Left to its default the SDK loads
       // ~/.claude/settings.json and settings.local.json exactly as the CLI
