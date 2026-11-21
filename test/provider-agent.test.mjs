@@ -125,12 +125,15 @@ test('alternative provider keeps Chrome read tools but gates browser actions by 
   for (const name of ['jarvis_chrome_status', 'jarvis_chrome_tabs', 'jarvis_chrome_navigate', 'jarvis_chrome_read_page', 'jarvis_chrome_screenshot']) {
     assert.ok(safe.includes(name), name + ' should be available in read-only mode')
   }
-  for (const name of ['jarvis_chrome_click', 'jarvis_chrome_type', 'jarvis_chrome_key', 'jarvis_chrome_form_input', 'jarvis_chrome_new_tab', 'jarvis_chrome_close_tab']) {
+  for (const name of ['jarvis_chrome_click', 'jarvis_chrome_type', 'jarvis_chrome_key', 'jarvis_chrome_form_input', 'jarvis_chrome_new_tab', 'jarvis_chrome_close_tab', 'jarvis_write_file']) {
     assert.ok(!safe.includes(name), name + ' must be withheld in read-only mode')
+    assert.ok(!providerNativeTools(false).toolMap.has(name), name + ' must not remain executable when hidden')
   }
-  const writable = providerNativeTools(true).tools.map((item) => item.function.name)
+  const writableSet = providerNativeTools(true)
+  const writable = writableSet.tools.map((item) => item.function.name)
   assert.ok(writable.includes('jarvis_chrome_click'))
   assert.ok(writable.includes('jarvis_chrome_close_tab'))
+  assert.ok(writableSet.toolMap.has('jarvis_chrome_click'))
 })
 
 test('compatible provider accepts a non-streaming JSON completion response', async () => {
