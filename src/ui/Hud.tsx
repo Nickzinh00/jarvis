@@ -146,7 +146,8 @@ function DecodeText({ text }: { text: string }) {
 
 /* --------------------------------------------------------------------- hud */
 
-export function Hud() {
+export function Hud({ onSend }: { onSend: (message: string) => void }) {
+  const [draft, setDraft] = useState('')
   const phase = useStore((s) => s.phase)
   const caption = useStore((s) => s.caption)
   const turns = useStore((s) => s.turns)
@@ -309,6 +310,30 @@ export function Hud() {
       {ui.chrome.suggestions && <Suggestions />}
 
       {error && <div className="error">{error}</div>}
+
+      <form
+        className="chat-dock"
+        onSubmit={(event) => {
+          event.preventDefault()
+          const message = draft.trim()
+          if (!message || phase === 'offline' || phase === 'boot') return
+          onSend(message)
+          setDraft('')
+        }}
+      >
+        <input
+          aria-label="Mensagem para JARVIS"
+          autoComplete="off"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={phase === 'offline' || phase === 'boot' ? 'Inicie o JARVIS para conversar...' : 'Digite uma mensagem para JARVIS...'}
+          disabled={phase === 'offline' || phase === 'boot'}
+          maxLength={12000}
+        />
+        <button type="submit" disabled={!draft.trim() || phase === 'offline' || phase === 'boot'}>
+          Enviar
+        </button>
+      </form>
 
       <footer className="hud-bottom">
         <span className="hint">
