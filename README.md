@@ -11,13 +11,13 @@ Extract the artifact ZIP and run the included .exe. The desktop app bundles its 
 
 ## Choose the AI brain
 
-J.A.R.V.I.S. is no longer limited to Claude Code. The default provider mode is **automatic**: it tries Ollama local first, then uses a cloud fallback if you configured one. Ollama runs a model on your computer and does not require a Claude subscription or cloud API key. The model itself must be downloaded separately and uses local disk, RAM and GPU.
+J.A.R.V.I.S. is no longer limited to Claude Code. The default provider mode is **automatic**: it tries Ollama local first, then uses a cloud fallback if you configured one. Ollama runs a model on your computer and does not require a Claude subscription or cloud API key. The default local model, qwen3-vl:4b, supports vision and tool use; it must be downloaded separately and uses local disk, RAM and GPU. It requires Ollama 0.12.7 or newer.
 
 Other provider options include OpenAI API, OpenRouter, Groq, Together AI, DeepSeek, Google Gemini and custom OpenAI-compatible endpoints. They require a model ID and the provider's own API key; cloud usage may be billed. Claude Agent SDK remains available when configured.
 
 Use the desktop menu and select **Configurar provedor de IA...** to choose automatic local-first mode, set a cloud fallback, or use one provider directly. To install the local Ollama runtime, use **Instalar Ollama local...**. The default example model can be downloaded with:
 
-    ollama pull llama3.1
+    ollama pull qwen3-vl:4b
 
 Read WINDOWS.md for installation, setup and troubleshooting details.
 
