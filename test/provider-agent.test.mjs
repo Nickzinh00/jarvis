@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig, resolveProviderConfig } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages } from '../bridge/provider-agent.mjs'
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
@@ -73,4 +73,28 @@ test('automatic provider mode gives a setup error when no local or cloud option 
     fallback: null,
   }, async () => { throw new Error('offline') })
   assert.match(config.error, /Start Ollama/)
+})
+
+import { makeToolMessages } from '../bridge/provider-agent.mjs'
+
+test('tool results keep tool replies separate from vision follow-up messages', () => {
+  const result = makeToolMessages('call-1', {
+    text: 'camera captured',
+    image: 'data:image/jpeg;base64,AAAA',
+    images: ['data:image/png;base64,BBBB', 'data:image/gif;base64,CCCC'],
+  })
+  assert.equal(result.toolMessage.role, 'tool')
+  assert.equal(result.toolMessage.tool_call_id, 'call-1')
+  assert.equal(result.toolMessage.content, 'camera captured')
+  assert.deepEqual(result.images, [
+    'data:image/jpeg;base64,AAAA',
+    'data:image/png;base64,BBBB',
+  ])
+})
+
+test('tool vision attachments are capped and reject non-supported image payloads', () => {
+  const images = Array.from({ length: 7 }, (_, index) => `data:image/webp;base64,IMAGE${index}`)
+  const result = makeToolMessages('call-2', { text: 'many images', images })
+  assert.equal(result.images.length, 4)
+  assert.ok(result.images.every((image) => image.startsWith('data:image/webp;')))
 })
