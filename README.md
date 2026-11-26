@@ -4,10 +4,8 @@ A Windows desktop voice assistant with an Iron Man-inspired holographic interfac
 
 ## Windows desktop installer
 
-Download the latest successful **JARVIS-Windows-x64-Installer** artifact from:
-https://github.com/Nickzinh00/jarvis/actions/workflows/windows-ci.yml
-
-Extract the artifact ZIP and run the included .exe. The desktop app bundles its Electron runtime, interface and local bridge. A separate Node.js install is not required on the target PC.
+Download **JARVIS-Setup-1.1.0-x64.exe** from the public release:
+https://github.com/Nickzinh00/jarvis/releases/tag/v1.1.0 The desktop app bundles its Electron runtime, interface and local bridge. A separate Node.js install is not required on the target PC.
 
 ## Choose the AI brain
 
