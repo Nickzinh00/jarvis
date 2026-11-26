@@ -46,7 +46,7 @@ Build the Windows x64 desktop installer on Windows:
 
 The GitHub Actions workflow runs a production-dependency security audit, lint, PowerShell parsing, the production build and automated tests before creating the installer artifact.
 
-Release candidate: JARVIS 1.1.0. Its Windows installer is published only after the security audit, lint, build and test workflow succeeds.
+JARVIS 1.1.0 is the current Windows x64 release target. Its installer is published only after the security audit, lint, build and test workflow succeeds.
 
 Windows build validation is enabled for this change through the repository's CI workflow.
 
