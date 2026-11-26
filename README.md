@@ -19,7 +19,7 @@ Use the desktop menu and select **Configurar provedor de IA...** to choose autom
 
     ollama pull qwen3-vl:4b
 
-Read WINDOWS.md for installation, setup and troubleshooting details.
+The interface also offers text chat, adaptive Lite/Balanced/Full graphics and optional image/voice-file generation. Hardware adaptation reduces only visual effects, never model answer quality. Configure media keys separately with **Configurar geração de mídia...** in the desktop menu: image creation uses OpenAI and generated speech uses ElevenLabs. External APIs may bill usage. Read WINDOWS.md for installation, setup and troubleshooting details.
 
 ## Preserved capabilities
 
@@ -46,4 +46,4 @@ Build the Windows x64 desktop installer on Windows:
 
     npm run dist:win
 
-The GitHub Actions workflow runs lint, the production build and automated tests before creating the installer artifact.
+The GitHub Actions workflow runs a production-dependency security audit, lint, PowerShell parsing, the production build and automated tests before creating the installer artifact.

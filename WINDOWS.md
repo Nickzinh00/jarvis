@@ -8,7 +8,7 @@
 3. Extract the artifact ZIP, then run the .exe installer.
 4. Launch J.A.R.V.I.S. from the Start menu or desktop shortcut.
 
-The desktop installer bundles Electron/Chromium, the built interface, the local bridge and the existing project dependencies. Node.js and Claude Code are not required on the target PC when using the Ollama or OpenAI-compatible provider engine.
+The desktop installer bundles Electron/Chromium, the built interface, the local bridge and the existing project dependencies. Node.js and Claude Code are not required on the target PC when using the Ollama or OpenAI-compatible provider engine. Large AI models are downloaded separately by Ollama.
 
 ## Configure the AI brain
 
@@ -21,6 +21,14 @@ Available choices:
 - Claude Agent SDK remains selectable for users who have a working Claude Code login.
 
 The default local model is qwen3-vl:4b, which supports vision and tools; it requires Ollama 0.12.7 or newer. The model is not bundled into the installer. Model files can take multiple gigabytes and performance depends on available RAM, storage and GPU.
+
+## Images, generated audio and chat
+
+- Use the text box at the bottom of the HUD to chat without a microphone. The spoken interface and wake word remain available.
+- The app inspects WebGL/GPU capability, RAM and CPU count reported by the local bridge. It starts in Lite, Balanced or Full graphics mode and can downgrade further after sustained low FPS. This changes only visual rendering (render scale, particles and post-processing), never model reasoning or answer quality.
+- Open **Configurar geração de mídia...** from the desktop menu to set an optional OpenAI image API key and/or ElevenLabs key. These are separate from the chat-provider key, so Ollama can remain the local conversation model.
+- Ask JARVIS to generate an image or voice-over. PNGs are saved under `JARVIS Workspace/Generated Media/Images`; MP3s go under `JARVIS Workspace/Generated Media/Audio` and open in an audio player blade.
+- Image generation needs an OpenAI API key. Generated speech files need an ElevenLabs API key. External API usage may incur charges. Without these keys, spoken replies can still use the local Windows/browser voice.
 
 ## Ollama
 
@@ -41,7 +49,7 @@ Some tools from the Claude Agent SDK are provider-specific. In particular, the o
 - The bridge binds to loopback and is not exposed to the LAN by default.
 - The normal mode remains read-only. Shell/file/browser actions that change things are not silently enabled.
 - Workspace file operations are constrained by the existing file policy; credential folders and files remain blocked.
-- Provider API keys are stored in the local Windows user profile under .jarvis/provider.json, with the file ACL restricted to the current Windows account. Never send a key or password through chat.
+- Provider and media API keys are stored in the local Windows user profile under `.jarvis/provider.json` and `.jarvis/media.json`, with the file ACL restricted to the current Windows account. Never send a key or password through chat.
 - Camera access is requested by the desktop app and remains subject to Windows permission settings.
 
 ## Troubleshooting

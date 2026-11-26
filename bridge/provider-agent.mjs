@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -10,6 +10,9 @@ import { probeUrl } from './page.mjs'
 import { executeChromeTool } from './chrome.mjs'
 
 const SETTINGS_FILE = join(homedir(), '.jarvis', 'provider.json')
+const MEDIA_SETTINGS_FILE = join(homedir(), '.jarvis', 'media.json')
+const IMAGE_MODELS = new Set(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2', 'gpt-image-1.5', 'gpt-image-1-mini'])
+const MAX_GENERATED_MEDIA_BYTES = 25 * 1024 * 1024
 const DEFAULT_OLLAMA = 'http://127.0.0.1:11434/v1'
 const DEFAULT_LOCAL_MODEL = 'qwen3-vl:4b'
 const MAX_TOOL_ROUNDS = 8
@@ -32,6 +35,8 @@ Only the jarvis_* tools and the MCP tools actually listed to you are available. 
 DISPLAY AND UI:
 - Use jarvis_display to compose visible HTML on a blade.
 - Use jarvis_blade for articles, images, galleries, video, embeds, markup, and kind camera.
+- Use jarvis_generate_image when the user explicitly asks for a new image. It requires the locally configured OpenAI image API key, saves a PNG in the JARVIS workspace and displays it.
+- Use jarvis_generate_speech for downloadable narration or audio. It requires the separately configured ElevenLabs key, saves an MP3 and opens its player. Normal spoken replies continue through the existing voice pipeline.
 - Use jarvis_ui with op patch, orbit, effect, screen, or reset to change the HUD.
 - Public search is jarvis_web_search. Open a discovered public article with jarvis_open_url or jarvis_blade.
 - The jarvis_chrome_* tools reuse the original Chrome extension native-host transport. Read-only tab listing, navigation, page reading, screenshots, find, scroll, console and network tools are available; click, type, key, form input, new-tab and close-tab tools are only included when local write mode is enabled. The extension must be installed and running. Never claim access unless the tool result confirms it.
@@ -76,6 +81,20 @@ export function readProviderConfig(env = process.env) {
     baseUrl: String(env.JARVIS_BASE_URL || saved.baseUrl || defaults.baseUrl || '').trim().replace(/\/+$/, ''),
     apiKey: String(env.JARVIS_API_KEY || saved.apiKey || defaults.apiKey || '').trim(),
     model: String(env.JARVIS_MODEL_NAME || saved.model || (['ollama', 'auto'].includes(provider) ? DEFAULT_LOCAL_MODEL : '')).trim(),
+  }
+}
+
+export function readMediaConfig(env = process.env, saved = readJson(MEDIA_SETTINGS_FILE)) {
+  const ai = readProviderConfig(env)
+  const claude = readJson(join(homedir(), '.claude.json'))
+  const openai = ai.provider === 'openai' ? ai : (ai.fallback?.provider === 'openai' ? ai.fallback : {})
+  const selectedModel = String(env.JARVIS_IMAGE_MODEL || saved.imageModel || 'gpt-image-2.6-flare').trim()
+  const selectedVoice = String(env.JARVIS_VOICE_ID || saved.voiceId || 'JBFqnCBsd6RMkjVDRZzb').trim()
+  return {
+    imageApiKey: String(env.JARVIS_IMAGE_API_KEY || env.OPENAI_API_KEY || saved.openaiApiKey || saved.imageApiKey || openai.apiKey || '').trim(),
+    elevenLabsApiKey: String(env.ELEVENLABS_API_KEY || saved.elevenLabsApiKey || claude.mcpServers?.elevenlabs?.env?.ELEVENLABS_API_KEY || '').trim(),
+    imageModel: IMAGE_MODELS.has(selectedModel) ? selectedModel : 'gpt-image-2.6-flare',
+    voiceId: /^[A-Za-z0-9_-]{6,100}$/.test(selectedVoice) ? selectedVoice : 'JBFqnCBsd6RMkjVDRZzb',
   }
 }
 
@@ -242,7 +261,9 @@ function nativeTools(toolMap = new Map()) {
     ['jarvis_web_search', 'Search public web results and return real titles, URLs and snippets.', schema({ query: { type: 'string' } }, ['query'])],
     ['jarvis_open_url', 'Inspect and open a public article on the JARVIS display.', schema({ url: { type: 'string' }, title: { type: 'string' } }, ['url'])],
     ['jarvis_display', 'Show composed HTML on the JARVIS blade display. Use plain HTML and .hud-* classes.', schema({ title: { type: 'string' }, html: { type: 'string' }, hold: { type: 'string', enum: ['turn', 'sticky'] } }, ['title', 'html'])],
-    ['jarvis_blade', 'Open an article, image, video, gallery or markup on the JARVIS blades.', schema({ title: { type: 'string' }, kind: { type: 'string', enum: ['article', 'image', 'gallery', 'video', 'embed', 'markup', 'camera'] }, url: { type: 'string' }, images: { type: 'array', items: { type: 'string' } }, html: { type: 'string' }, mode: { type: 'string', enum: ['reader', 'live'] }, size: { type: 'string', enum: ['compact', 'tall', 'wide', 'full'] }, hold: { type: 'string', enum: ['turn', 'sticky'] } }, ['title', 'kind'])],
+    ['jarvis_blade', 'Open an article, image, audio file, video, gallery or markup on the JARVIS blades.', schema({ title: { type: 'string' }, kind: { type: 'string', enum: ['article', 'image', 'gallery', 'video', 'audio', 'embed', 'markup', 'camera'] }, url: { type: 'string' }, images: { type: 'array', items: { type: 'string' } }, html: { type: 'string' }, mode: { type: 'string', enum: ['reader', 'live'] }, size: { type: 'string', enum: ['compact', 'tall', 'wide', 'full'] }, hold: { type: 'string', enum: ['turn', 'sticky'] } }, ['title', 'kind'])],
+    ['jarvis_generate_image', 'Generate an image using the configured OpenAI image API, save it in the JARVIS workspace and show it on screen. Requires a separate image API key.', schema({ prompt: { type: 'string', maxLength: 4000 }, title: { type: 'string', maxLength: 80 }, size: { type: 'string', enum: ['1024x1024', '1536x1024', '1024x1536'] }, quality: { type: 'string', enum: ['low', 'medium', 'high'] } }, ['prompt'])],
+    ['jarvis_generate_speech', 'Generate a downloadable spoken-audio file with the configured ElevenLabs voice, save it locally and open an audio player. Requires an ElevenLabs API key.', schema({ text: { type: 'string', maxLength: 4000 }, title: { type: 'string', maxLength: 80 }, voiceId: { type: 'string', maxLength: 100 } }, ['text'])],
     ['jarvis_ui', 'Control the JARVIS interface using patch, orbit, effect, screen or reset operations.', schema({ op: { type: 'string', enum: ['patch', 'orbit', 'effect', 'screen', 'reset'] }, args: { type: 'object', additionalProperties: true } }, ['op'])],
     ['jarvis_look', 'Use the camera only when the user asks you to look at something.', schema({ reason: { type: 'string' } })],
     ['jarvis_watch', 'Watch a short camera clip only after the user explicitly asks.', schema({ seconds: { type: 'integer', minimum: 2, maximum: 15 }, when: { type: 'string', enum: ['now', 'past'] }, reason: { type: 'string' } })],
@@ -271,6 +292,8 @@ function nativeTools(toolMap = new Map()) {
     jarvis_open_url: 'mcp__jarvis__blade',
     jarvis_display: 'mcp__jarvis__display',
     jarvis_blade: 'mcp__jarvis__blade',
+    jarvis_generate_image: 'mcp__jarvis__generate_image',
+    jarvis_generate_speech: 'mcp__jarvis__generate_speech',
     jarvis_ui: 'mcp__jarvis_ui__ui_theme',
     jarvis_look: 'mcp__jarvis_eyes__look',
     jarvis_watch: 'mcp__jarvis_eyes__watch',
@@ -387,7 +410,7 @@ async function executeNative(name, args, ctx) {
     const url = String(args.url || '').trim()
     const images = Array.isArray(args.images) ? args.images.filter((v) => typeof v === 'string').slice(0, 8) : []
     if (kind === 'gallery' && !images.length) throw new Error('A gallery needs image URLs.')
-    if (['article', 'image', 'video', 'embed'].includes(kind) && !url) throw new Error(kind + ' needs a URL.')
+    if (['article', 'image', 'video', 'audio', 'embed'].includes(kind) && !url) throw new Error(kind + ' needs a URL.')
     if (kind === 'markup' && !String(args.html || '').trim()) throw new Error('Markup needs HTML content.')
     if (url) {
       const issue = await fetchTargetProblem(url)
@@ -405,6 +428,61 @@ async function executeNative(name, args, ctx) {
       hold: args.hold === 'sticky' ? 'sticky' : 'turn',
     } })
     return { text: 'Opened on the JARVIS display.' }
+  }
+  if (name === 'jarvis_generate_image') {
+    const media = readMediaConfig()
+    if (!media.imageApiKey) throw new Error('Image generation is not configured. Open the J.A.R.V.I.S. desktop menu and choose “Configurar geração de mídia...”. An OpenAI API key is required and may incur separate usage charges.')
+    const prompt = String(args.prompt || '').trim().slice(0, 4000)
+    if (!prompt) throw new Error('Describe the image you want to generate.')
+    const size = ['1024x1024', '1536x1024', '1024x1536'].includes(args.size) ? args.size : '1024x1024'
+    const quality = ['low', 'medium', 'high'].includes(args.quality) ? args.quality : 'medium'
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + media.imageApiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: media.imageModel, prompt, n: 1, size, quality, output_format: 'png', moderation: 'auto' }),
+      signal: AbortSignal.timeout(180000),
+    })
+    if (!response.ok) throw new Error('Image service returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 400))
+    const payload = await response.json()
+    const encoded = payload.data?.[0]?.b64_json
+    if (typeof encoded !== 'string' || encoded.length < 100 || encoded.length > 36 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+      throw new Error('The image service returned an invalid or oversized image.')
+    }
+    const image = Buffer.from(encoded, 'base64')
+    if (image.length < 16 || image.length > MAX_GENERATED_MEDIA_BYTES || image.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
+      throw new Error('The generated file did not pass PNG validation or exceeded the 25 MB limit.')
+    }
+    const folder = join(workspace, 'Generated Media', 'Images')
+    await mkdir(folder, { recursive: true })
+    const filePath = join(folder, 'jarvis-' + Date.now() + '-' + randomUUID().slice(0, 8) + '.png')
+    await writeFile(filePath, image, { flag: 'wx' })
+    const title = String(args.title || 'IMAGEM GERADA').replace(/[\\/:*?"<>|]/g, ' ').trim().slice(0, 80) || 'IMAGEM GERADA'
+    send({ type: 'blade', blade: { id: 'g' + randomUUID().slice(0, 12), title, kind: 'image', url: filePath, size: 'wide', hold: 'sticky' } })
+    return { text: 'Image generated, validated as PNG, saved in the JARVIS workspace and displayed. File: ' + basename(filePath) + '.' }
+  }
+  if (name === 'jarvis_generate_speech') {
+    const media = readMediaConfig()
+    if (!media.elevenLabsApiKey) throw new Error('Audio generation is not configured. Open the J.A.R.V.I.S. desktop menu and choose “Configurar geração de mídia...”. An ElevenLabs API key is required and may incur separate usage charges.')
+    const spokenText = String(args.text || '').trim().slice(0, 4000)
+    if (!spokenText) throw new Error('Provide the text to turn into speech.')
+    const voiceId = /^[A-Za-z0-9_-]{6,100}$/.test(String(args.voiceId || '')) ? String(args.voiceId) : media.voiceId
+    const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream?output_format=mp3_22050_32', {
+      method: 'POST',
+      headers: { 'xi-api-key': media.elevenLabsApiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: spokenText, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.4, similarity_boost: 0.75, speed: 1.05 } }),
+      signal: AbortSignal.timeout(120000),
+    })
+    if (!response.ok) throw new Error('Voice service returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 400))
+    if (!(response.headers.get('content-type') || '').toLowerCase().startsWith('audio/')) throw new Error('The voice service did not return an audio stream.')
+    const audio = Buffer.from(await response.arrayBuffer())
+    if (!audio.length || audio.length > MAX_GENERATED_MEDIA_BYTES) throw new Error('The generated audio is empty or exceeds the 25 MB limit.')
+    const folder = join(workspace, 'Generated Media', 'Audio')
+    await mkdir(folder, { recursive: true })
+    const filePath = join(folder, 'jarvis-' + Date.now() + '-' + randomUUID().slice(0, 8) + '.mp3')
+    await writeFile(filePath, audio, { flag: 'wx' })
+    const title = String(args.title || 'ÁUDIO GERADO').replace(/[\\/:*?"<>|]/g, ' ').trim().slice(0, 80) || 'ÁUDIO GERADO'
+    send({ type: 'blade', blade: { id: 'a' + randomUUID().slice(0, 12), title, kind: 'audio', url: filePath, size: 'compact', hold: 'sticky' } })
+    return { text: 'Speech generated, saved as an MP3 in the JARVIS workspace and displayed in an audio player. File: ' + basename(filePath) + '.' }
   }
   if (name === 'jarvis_ui') {
     const op = String(args.op || '')

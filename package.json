@@ -1,7 +1,7 @@
 {
   "name": "jarvis",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "J.A.R.V.I.S. desktop voice assistant with 3D HUD, local bridge, multi-provider AI and MCP tools.",
   "license": "MIT",
   "type": "module",
@@ -74,6 +74,10 @@
       {
         "from": "configure-provider.ps1",
         "to": "configure-provider.ps1"
+      },
+      {
+        "from": "configure-media.ps1",
+        "to": "configure-media.ps1"
       },
       {
         "from": "install-ollama.ps1",

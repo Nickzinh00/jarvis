@@ -22,7 +22,7 @@ import { displayServer } from './panels.mjs'
 import { uiServer } from './ui.mjs'
 import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
-import { homedir, tmpdir } from 'node:os'
+import { availableParallelism, cpus, homedir, tmpdir, totalmem } from 'node:os'
 import { mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
@@ -498,19 +498,21 @@ const SYSTEM_PROMPT = [
  * machine — no reason to make you paste it into a second .env file. The browser
  * never sees it: it POSTs text to /tts here and gets audio back.
  */
+function mediaSettings() {
+  try { return JSON.parse(readFileSync(join(homedir(), '.jarvis', 'media.json'), 'utf8')) }
+  catch { return {} }
+}
 function elevenKey() {
   if (process.env.ELEVENLABS_API_KEY) return process.env.ELEVENLABS_API_KEY
+  const configured = mediaSettings().elevenLabsApiKey
+  if (typeof configured === 'string' && configured.trim()) return configured.trim()
   try {
-    const cfg = JSON.parse(
-      readFileSync(join(homedir(), '.claude.json'), 'utf8'),
-    )
+    const cfg = JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf8'))
     return cfg.mcpServers?.elevenlabs?.env?.ELEVENLABS_API_KEY ?? null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
-
-const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
+const configuredVoice = String(process.env.JARVIS_VOICE_ID || mediaSettings().voiceId || 'JBFqnCBsd6RMkjVDRZzb')
+const VOICE_ID = /^[A-Za-z0-9_-]{6,100}$/.test(configuredVoice) ? configuredVoice : 'JBFqnCBsd6RMkjVDRZzb'
 
 /**
  * Where /file is permitted to read from, and how big a read may get.
@@ -525,6 +527,7 @@ const IMAGE_TYPES = {
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
+  '.mp3': 'audio/mpeg',
   // .svg is deliberately absent. An SVG is a scriptable document, and this
   // endpoint serves it from the bridge's own origin — the one origin allowed
   // to open the agent socket. A picture is not worth that.
@@ -744,10 +747,15 @@ const handleRequest = async (req, res) => {
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
     const provider = readProviderConfig()
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, provider: provider.provider, model: provider.model }))
+    const cpuCores = typeof availableParallelism === 'function' ? availableParallelism() : cpus().length
+    const memoryGB = Math.round((totalmem() / (1024 ** 3)) * 10) / 10
+    return res.end(JSON.stringify({
+      ok: true, tts: eleven, stt: eleven, provider: provider.provider, model: provider.model,
+      hardware: { cpuCores, memoryGB },
+    }))
   }
 
-  // Serve local image files to the page. Screenshots and generated art land on
+  // Serve local generated images and audio files to the page. Media lands on
   // disk as absolute paths, and a page served over http can't read file:// —
   // so the bridge, which can, hands them over.
   if (req.method === 'GET' && req.url?.startsWith('/file?')) {
@@ -764,12 +772,11 @@ const handleRequest = async (req, res) => {
     }
     const dot = real ? real.lastIndexOf('.') : -1
     const ext = dot === -1 ? '' : real.slice(dot).toLowerCase()
-    // Images only, absolute paths only, and only under roots we expect things
-    // to be written to. This endpoint exists to show pictures, not to be a
-    // general file read for whatever the model — or another page — asks for.
+    // An explicit media-extension allowlist, absolute paths only, and roots we
+    // expect files to be written to. This is not a general file-read endpoint.
     if (!real || !Object.hasOwn(IMAGE_TYPES, ext) || !withinRoots(real)) {
       res.writeHead(400, cors)
-      return res.end('images only')
+      return res.end('unsupported media type')
     }
     try {
       const info = await stat(real)

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openAIEndpoint, readProviderConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, restrictToolRegistries, streamCompletion, toolName } from '../bridge/provider-agent.mjs'
+import { openAIEndpoint, readProviderConfig, readMediaConfig, resolveProviderConfig, makeToolMessages, providerNativeTools, restrictToolRegistries, streamCompletion, toolName } from '../bridge/provider-agent.mjs'
 
 test('OpenAI-compatible endpoint adds the chat completion path once', () => {
   assert.equal(
@@ -180,4 +180,22 @@ test('only provider tools actually advertised to the model remain executable', (
   assert.equal(result, exposed)
   assert.equal(registry.has('visible_tool'), true)
   assert.equal(registry.has('hidden_tool'), false)
+})
+
+
+test('image and speech credentials are independent from a local chat model', () => {
+  const media = readMediaConfig({ JARVIS_PROVIDER: 'ollama', JARVIS_IMAGE_API_KEY: 'image-test-key', ELEVENLABS_API_KEY: 'speech-test-key' }, {})
+  assert.equal(media.imageApiKey, 'image-test-key')
+  assert.equal(media.elevenLabsApiKey, 'speech-test-key')
+  assert.equal(media.imageModel, 'gpt-image-2.6-flare')
+  assert.match(media.voiceId, /^[A-Za-z0-9_-]{6,100}$/)
+})
+
+test('image and speech generation are available in default read-only mode', () => {
+  const { tools, toolMap } = providerNativeTools(false)
+  const names = tools.map((item) => item.function.name)
+  assert.ok(names.includes('jarvis_generate_image'))
+  assert.ok(names.includes('jarvis_generate_speech'))
+  assert.ok(toolMap.has('jarvis_generate_image'))
+  assert.ok(toolMap.has('jarvis_generate_speech'))
 })

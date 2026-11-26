@@ -118,6 +118,7 @@ function installApplicationMenu() {
       label: 'J.A.R.V.I.S.',
       submenu: [
         { label: 'Configurar provedor de IA...', click: () => openPowerShellHelper('configure-provider.ps1') },
+        { label: 'Configurar geração de mídia...', click: () => openPowerShellHelper('configure-media.ps1') },
         { label: 'Instalar Ollama local...', click: () => openPowerShellHelper('install-ollama.ps1') },
         { type: 'separator' },
         { label: 'Abrir pasta de trabalho', click: () => shell.openPath(process.env.JARVIS_WORKSPACE) },
